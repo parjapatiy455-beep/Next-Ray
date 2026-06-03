@@ -24,7 +24,7 @@ app.get("/api/config", (req, res) => {
 // 2. API: Safe NVIDIA completion with streaming proxy using OpenAI SDK
 app.post("/api/chat/nvidia", async (req, res) => {
   try {
-    const { messages, temperature, maxTokens, modelId, customKey } = req.body;
+    const { messages, temperature, maxTokens, modelId, customKey, systemInstruction } = req.body;
     
     // Key hierarchy: user provided Custom Key in App Settings UI > server environment key
     const rawKey = customKey || process.env.NVIDIA_API_KEY;
@@ -56,17 +56,29 @@ app.post("/api/chat/nvidia", async (req, res) => {
     });
 
     const parsedMessages = messages || [];
+    const cleanedMessages: any[] = [];
+
+    // Inject system instruction if present
+    if (systemInstruction) {
+      cleanedMessages.push({
+        role: "system",
+        content: systemInstruction,
+      });
+    }
+
     // Strip out non-OpenAI properties if they exist and align roles
-    const cleanedMessages = parsedMessages.map((m: any) => ({
-      role: m.role === "model" || m.role === "assistant" ? "assistant" : "user",
-      content: m.content || ""
-    }));
+    parsedMessages.forEach((m: any) => {
+      cleanedMessages.push({
+        role: m.role === "model" || m.role === "assistant" ? "assistant" : "user",
+        content: m.content || ""
+      });
+    });
 
     // Create a streaming completion using the OpenAI SDK
     const stream = await openai.chat.completions.create({
       model: modelId || "meta/llama-3.3-70b-instruct",
       messages: cleanedMessages,
-      temperature: typeof temperature === "number" ? temperature : 0.7,
+      temperature: typeof temperature === "number" ? temperature : 0.2,
       max_tokens: typeof maxTokens === "number" ? maxTokens : 1024,
       stream: true,
     });
@@ -82,10 +94,16 @@ app.post("/api/chat/nvidia", async (req, res) => {
     res.end();
   } catch (error: any) {
     console.error("NVIDIA API error:", error);
+    let userMsg = error.message || "NVIDIA service error";
+    
+    if (error.status === 410 || userMsg.includes("410") || userMsg.toLowerCase().includes("gone")) {
+      userMsg = "NVIDIA API Error (410 Gone): Your NVIDIA API Key seems inactive, has run out of its free trial credits, is expired/revoked, or you're querying a retired model. Please ensure your API Key is correct in your Cloud Run Secrets, or paste a new, active NIM key in the **Options** drawer.";
+    }
+
     if (!res.headersSent) {
-      res.status(500).json({ error: error.message || "NVIDIA service error" });
+      res.status(500).json({ error: userMsg });
     } else {
-      res.write(`data: ${JSON.stringify({ error: `NVIDIA Service Error: ${error.message || "Unknown error"}` })}\n\n`);
+      res.write(`data: ${JSON.stringify({ error: userMsg })}\n\n`);
       res.write("data: [DONE]\n\n");
       res.end();
     }
