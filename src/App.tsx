@@ -63,22 +63,134 @@ function extractDecksAndHtml(text: string) {
     }
   }
 
-  // Backup simple search for raw JSON structures
-  try {
-    const rawMatch = text.match(/\{\s*"type"\s*:\s*"slideshow_deck"[\s\S]*\}/);
-    if (rawMatch) {
-      const parsed = JSON.parse(rawMatch[0]);
-      return { type: 'slides', data: parsed };
+  // Find where the JSON slide deck begins
+  let startIdx = text.indexOf('{"type": "slideshow_deck"');
+  if (startIdx === -1) {
+    const regexMatch = text.search(/\{\s*"type"\s*:\s*"slideshow_deck"/);
+    if (regexMatch !== -1) {
+      startIdx = regexMatch;
     }
-  } catch(e){}
-
-  // Extract standard html blocks
-  const htmlRegex = /```html\s*([\s\S]*?)\s*```/g;
-  let htmlMatch;
-  while ((htmlMatch = htmlRegex.exec(text)) !== null) {
-    return { type: 'html', data: htmlMatch[1] };
   }
-  
+
+  // If no slide deck structural signature is found, check if code block has been initiated
+  if (startIdx === -1) {
+    const codeBlockStart = text.indexOf('```json');
+    if (codeBlockStart !== -1) {
+      const segment = text.slice(codeBlockStart + 7).trim();
+      const typeKeyIdx = segment.indexOf('"type"');
+      const pptValIdx = segment.indexOf('"slideshow_deck"');
+      if (typeKeyIdx !== -1 && pptValIdx !== -1 && (typeKeyIdx < 120)) {
+        const openBrace = segment.indexOf('{');
+        if (openBrace !== -1) {
+          startIdx = codeBlockStart + 7 + openBrace;
+        }
+      }
+    }
+  }
+
+  if (startIdx === -1) {
+    // Check if there is standard HTML code block streaming
+    const htmlRegex = /```html\s*([\s\S]*?)\s*(?:```|$)/g;
+    let htmlMatch;
+    while ((htmlMatch = htmlRegex.exec(text)) !== null) {
+      const code = htmlMatch[1].trim();
+      if (code.length > 30) {
+        return { type: 'html', data: code };
+      }
+    }
+    return null;
+  }
+
+  // Extract from the start curly brace onwards
+  const rawPiece = text.slice(startIdx);
+
+  // Count braces/brackets to close them cleanly
+  let openBraces = 0;
+  let openBrackets = 0;
+  let inString = false;
+  let escaped = false;
+  let cleanText = "";
+
+  for (let i = 0; i < rawPiece.length; i++) {
+    const char = rawPiece[i];
+    
+    // Stop copy if we hit another triple backtick markdown separator after we have characters
+    if (char === '`' && i > 5 && rawPiece.slice(i, i + 3) === '```') {
+      break;
+    }
+
+    cleanText += char;
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (char === '{') openBraces++;
+      else if (char === '}') openBraces--;
+      else if (char === '[') openBrackets++;
+      else if (char === ']') openBrackets--;
+    }
+  }
+
+  // Perform string closing if it was left untyped
+  let closingStr = "";
+  if (inString) {
+    closingStr += '"';
+  }
+
+  // Assemble current state
+  let currentDraft = cleanText + closingStr;
+
+  // Clear common trailing delimiters that yield parse errors
+  let trimText = currentDraft.trim();
+  if (trimText.endsWith(',') || trimText.endsWith(':')) {
+    trimText = trimText.slice(0, -1);
+  }
+
+  // Close open brackets and braces from inside out
+  let recovery = "";
+  for (let b = 0; b < openBrackets; b++) {
+    if (openBraces > 1) {
+      recovery += '}';
+      openBraces--;
+    }
+    recovery += ']';
+  }
+  for (let ob = 0; ob < openBraces; ob++) {
+    recovery += '}';
+  }
+
+  const permutations = [
+    trimText + recovery,
+    trimText + '}' + recovery,
+    trimText + '"]}' + recovery,
+    trimText + '"]' + recovery
+  ];
+
+  for (const candidate of permutations) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && (parsed.type === 'slideshow_deck' || Array.isArray(parsed.slides))) {
+        if (!parsed.slides) parsed.slides = [];
+        if (!Array.isArray(parsed.slides)) parsed.slides = [parsed.slides];
+        // Clean out blank or title-less slides
+        parsed.slides = parsed.slides.filter((s: any) => s && typeof s === 'object' && s.title);
+        if (parsed.slides.length > 0) {
+          return { type: 'slides', data: parsed };
+        }
+      }
+    } catch (e) {}
+  }
+
   return null;
 }
 
@@ -109,11 +221,16 @@ export default function App() {
   // Sidebar settings
   const [config, setConfig] = useState<ChatConfig>({
     modelId: 'meta/llama-3.3-70b-instruct',
-    systemInstruction: `You are Next Ray, an advanced AI companion designed to mimic ChatGPT's professional formatting, with access to an interactive Slide Creator and HTML Sandbox. Always avoid presenting complex answers as a single custom paragraph. Instead, ALWAYS format your responses with structured paragraphs, bold emphasis on key items, clean bulleted or numbered action lists, and clear subheadings. Keep answers exceptionally organized, spacious, and highly visually engaging.
+    systemInstruction: `You are Next Ray, an advanced AI companion with access to an interactive Slide Creator and HTML Sandbox. 
 
-ADDITIONAL CORE ABILITY:
-You can build and edit professional slideshow presentations and interactive web apps!
-1. To build, edit, or update a PPT presentation deck for the user, ALWAYS write a markdown code block of type "json" containing this exact schema structure:
+CRITICAL DIRECTIVE - RESPOND SHORT, SWEET, AND ULTRA FAST:
+1. Always keep your verbal responses exceptionally short and sweet (maximum 1 or 2 sweet, exciting sentences in natural Hinglish or simple friendly English!).
+   - Example 1 (User asks for PPT): "Sure! Aapke liye ek awesome pitch deck design kar raha hoon. Check out the slides player!"
+   - Example 2 (User asks for edit): "Done! Meine slides ko update kar diya hai. Check details inside the sliding live player."
+2. Never repeat or summarize what's in the PPT JSON block or HTML block verbally. Absolutely no long intros, long summaries, or prefaces. Start outputting the JSON or HTML code blocks instantly after the single sentence greeting. This saves tokens, reduces wait time, and runs extremely fast!
+
+ADDITIONAL PPT DECK & HTML STRUCTURES:
+1. To build, edit, or update a PPT presentation deck, ALWAYS write a markdown code block of type "json" containing this exact schema structure:
 \`\`\`json
 {
   "type": "slideshow_deck",
@@ -121,32 +238,22 @@ You can build and edit professional slideshow presentations and interactive web 
   "slides": [
     {
       "id": "s1",
-      "title": "Slide Title Text",
-      "subtitle": "Slide Subtitle or Caption",
-      "bullets": ["Bullet line 1", "Bullet line 2"],
-      "layout": "title" // can be 'title', 'split', 'bento', 'quote', 'metrics'
+      "title": "Welcome Slide",
+      "subtitle": "Subtitle or Caption",
+      "bullets": ["Bullet 1", "Bullet 2"],
+      "layout": "title" // 'title', 'split', 'bento', 'quote', 'metrics'
     }
   ]
 }
 \`\`\`
-For layouts:
-- 'title': centered landing presentation banner.
-- 'split': dual columns for lists and bullet items (bullets list automatically renders on right side).
-- 'bento': comprehensive bento list presentation.
-- 'quote': large quotation presentation (uses 'title' field as quotation body, and 'quoteAuthor' for citation).
-- 'metrics': large scale statistics highlight (use 'metricValue' such as "99.8%" and 'metricLabel' such as "System Speedup Index").
+Layouts:
+- 'title': Centered landing screen.
+- 'split': Parallel layout. List items go automatically on the right side.
+- 'bento': Elegant showcase grid.
+- 'quote': Quotation screen ('title' has quotation content, 'quoteAuthor' for name).
+- 'metrics': Statistics highlight ('metricValue' such as "98%" and 'metricLabel' such as "Satisfaction").
 
-2. To generate a live, working HTML mock/sandbox code, ALWAYS output the complete working HTML document enclosed inside an \`\`\`html markdown block containing full CSS styles or using CDN Tailwind:
-\`\`\`html
-<!DOCTYPE html>
-<html>
-  <head>
-    <script src="https://cdn.tailwindcss.com"></script>
-  </head>
-  ...
-</html>
-\`\`\`
-Feel free to introduce yourself as an interactive PPT & Sandbox mastermind!`,
+2. To generate HTML mock code, output complete document inside an \`\`\`html markdown block using CDN Tailwind. Always respond instantly & concisely!`,
     temperature: 0.7,
     maxTokens: 3000,
   });
@@ -697,6 +804,17 @@ Feel free to introduce yourself as an interactive PPT & Sandbox mastermind!`,
               accumulatedText += parsed.text;
               
               const now = Date.now();
+              // Live auto pop-up workbench as soon as slides or HTML template initiates
+              const lowerText = accumulatedText.toLowerCase();
+              if (lowerText.includes('slideshow_deck') || 
+                  lowerText.includes('"slides"') || 
+                  (lowerText.includes('```json') && lowerText.includes('"type"')) ||
+                  lowerText.includes('```html')) {
+                if (!isWorkbenchOpen) {
+                  setIsWorkbenchOpen(true);
+                }
+              }
+
               // Update state at most every 80ms to prevent heavy React re-renders and key lagging
               if (now - lastUpdate > 80) {
                 lastUpdate = now;
@@ -712,6 +830,16 @@ Feel free to introduce yourself as an interactive PPT & Sandbox mastermind!`,
                   };
                   return [...filtered, streamedMsg];
                 });
+
+                // Render compiled slides or HTML sandbox incremental code blocks on-the-fly!
+                const dynamicRes = extractDecksAndHtml(accumulatedText);
+                if (dynamicRes) {
+                  if (dynamicRes.type === 'slides') {
+                    window.dispatchEvent(new CustomEvent('update-slideshow-deck', { detail: dynamicRes.data }));
+                  } else if (dynamicRes.type === 'html') {
+                    window.dispatchEvent(new CustomEvent('update-html-sandbox', { detail: { code: dynamicRes.data } }));
+                  }
+                }
               }
             }
           }
