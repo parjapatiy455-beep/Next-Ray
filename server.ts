@@ -27,13 +27,17 @@ app.post("/api/chat/nvidia", async (req, res) => {
     const { messages, temperature, maxTokens, modelId, customKey } = req.body;
     
     // Key hierarchy: user provided Custom Key in App Settings UI > server environment key
-    const apiKey = customKey || process.env.NVIDIA_API_KEY;
+    const rawKey = customKey || process.env.NVIDIA_API_KEY;
+    const apiKey = (rawKey && rawKey !== "undefined" && rawKey !== "null") ? rawKey : "";
+
+    console.log(`[Next Ray] Incoming request. Mode: ${modelId}. Key length: ${apiKey.length}. Messages count: ${messages?.length}`);
 
     if (!apiKey) {
+      console.warn("[Next Ray] Rejected request: NVIDIA API Key is missing/unconfigured.");
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
-      const errorMsg = "NVIDIA API Key is unconfigured. Please configure NVIDIA_API_KEY in the cloud run environment, local .env file, or paste a Custom NIM Session Key in the Options panel.";
+      const errorMsg = "NVIDIA API Key is unconfigured. Please configure NVIDIA_API_KEY in the cloud run environment / Secrets panel, or paste a Custom NIM Session Key in the Options panel.";
       res.write(`data: ${JSON.stringify({ error: errorMsg })}\n\n`);
       res.write("data: [DONE]\n\n");
       res.end();
@@ -51,10 +55,11 @@ app.post("/api/chat/nvidia", async (req, res) => {
       baseURL: "https://integrate.api.nvidia.com/v1",
     });
 
+    const parsedMessages = messages || [];
     // Strip out non-OpenAI properties if they exist and align roles
-    const cleanedMessages = messages.map((m: any) => ({
+    const cleanedMessages = parsedMessages.map((m: any) => ({
       role: m.role === "model" || m.role === "assistant" ? "assistant" : "user",
-      content: m.content
+      content: m.content || ""
     }));
 
     // Create a streaming completion using the OpenAI SDK

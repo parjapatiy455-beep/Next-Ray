@@ -475,8 +475,15 @@ export default function App() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Model gateway return code error");
+        const errorText = await response.text();
+        let errorMessage = "Model gateway return code error";
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          errorMessage = errorText || `HTTP Error ${response.status}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const reader = response.body?.getReader();
