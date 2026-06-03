@@ -189,9 +189,10 @@ export default function App() {
     // Capture model of current selected session to synchronize configuration dropdown
     const activeSession = sessions.find(s => s.chatId === currentSessionId);
     if (activeSession) {
+      const isModelValid = AVAILABLE_MODELS.some(m => m.id === activeSession.model);
       setConfig(prev => ({
         ...prev,
-        modelId: activeSession.model
+        modelId: isModelValid ? activeSession.model : (AVAILABLE_MODELS[0]?.id || "deepseek-ai/deepseek-r1")
       }));
     }
 

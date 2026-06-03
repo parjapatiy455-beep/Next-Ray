@@ -36,20 +36,38 @@ export async function onRequestPost(context: any): Promise<Response> {
       });
     });
 
-    const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+    let response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: modelId || "meta/llama-3.3-70b-instruct",
+        model: modelId || "deepseek-ai/deepseek-r1",
         messages: cleanedMessages,
         temperature: typeof temperature === "number" ? temperature : 0.2,
         max_tokens: typeof maxTokens === "number" ? maxTokens : 1024,
         stream: true,
       }),
     });
+
+    if (response.status === 404) {
+      console.warn(`[Next Ray Worker] Model ${modelId} returned 404. Falling back to deepseek-ai/deepseek-r1`);
+      response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "deepseek-ai/deepseek-r1",
+          messages: cleanedMessages,
+          temperature: typeof temperature === "number" ? temperature : 0.2,
+          max_tokens: typeof maxTokens === "number" ? maxTokens : 1024,
+          stream: true,
+        }),
+      });
+    }
 
     if (!response.ok) {
       const errText = await response.text();
