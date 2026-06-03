@@ -45,6 +45,7 @@ import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
 import ModelSelector from './components/ModelSelector';
 import SettingsPanel from './components/SettingsPanel';
+import InteractiveWorkbench from './components/InteractiveWorkbench';
 import { AVAILABLE_MODELS } from './lib/models';
 
 export default function App() {
@@ -56,6 +57,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isStreamLoading, setIsStreamLoading] = useState(false);
   const [serverKeyConfigured, setServerKeyConfigured] = useState(false);
+  const [isWorkbenchOpen, setIsWorkbenchOpen] = useState(false);
   
   // Email-Password Authentication Credentials States
   const [authEmail, setAuthEmail] = useState('');
@@ -733,6 +735,21 @@ export default function App() {
           />
 
           <div className="ml-auto flex items-center gap-2">
+            {user && (
+              <button
+                onClick={() => setIsWorkbenchOpen(prev => !prev)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 border rounded-xl text-xs font-bold transition-all active:scale-[0.98] cursor-pointer ${
+                  isWorkbenchOpen 
+                    ? 'bg-slate-900 border-slate-900 text-emerald-400 font-extrabold shadow-md' 
+                    : 'border-slate-205 text-slate-700 bg-white hover:bg-slate-50'
+                }`}
+                title="Open Sandbox & Slides Deck Builder"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Creative Workbench</span>
+                <span className="sm:hidden">Workbench</span>
+              </button>
+            )}
             {!user && (
               <button
                 onClick={handleLogin}
@@ -746,17 +763,25 @@ export default function App() {
         </div>
 
         {user ? (
-          <ChatArea
-            messages={messages}
-            currentModelId={config.modelId}
-            config={config}
-            onSendMessage={handleSendMessage}
-            isStreamLoading={isStreamLoading}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            activeModel={activeModel}
-            serverKeyConfigured={serverKeyConfigured}
-            onQuickPrompt={(text) => handleSendMessage(text)}
-          />
+          <div className="flex-1 flex overflow-hidden min-h-0 relative select-text">
+            <ChatArea
+              messages={messages}
+              currentModelId={config.modelId}
+              config={config}
+              onSendMessage={handleSendMessage}
+              isStreamLoading={isStreamLoading}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+              activeModel={activeModel}
+              serverKeyConfigured={serverKeyConfigured}
+              onQuickPrompt={(text) => handleSendMessage(text)}
+            />
+            {isWorkbenchOpen && (
+              <InteractiveWorkbench
+                onClose={() => setIsWorkbenchOpen(false)}
+                onPasteToChat={(text) => handleSendMessage(text)}
+              />
+            )}
+          </div>
         ) : (
           // Full-screen CTA Login and Signup Form
           <div className="flex-grow flex flex-col items-center justify-center p-6 bg-slate-50/50">
