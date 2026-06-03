@@ -37,8 +37,7 @@ service cloud.firestore {
         && incoming().email.size() <= 256;
       allow update: if isOwner(userId)
         && incoming().uid == userId
-        && incoming().email == existing().email // immutable email
-        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']);
+        && incoming().email == existing().email; // immutable email
     }
 
     // 3. Chats Collection
@@ -51,18 +50,12 @@ service cloud.firestore {
         && incoming().chatId == chatId
         && incoming().userId == request.auth.uid
         && incoming().title is string && incoming().title.size() <= 200
-        && incoming().model is string && incoming().model.size() <= 100
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().model is string && incoming().model.size() <= 100;
         
       allow update: if isSignedIn()
         && existing().userId == request.auth.uid
         && incoming().userId == request.auth.uid
-        && incoming().chatId == chatId
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasAll(['updatedAt'])
-        && incoming().diff(existing()).affectedKeys().hasAny(['title', 'updatedAt']);
+        && incoming().chatId == chatId;
         
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
 
@@ -83,14 +76,10 @@ service cloud.firestore {
           && incoming().chatId == chatId
           && incoming().userId == request.auth.uid
           && incoming().role in ['user', 'assistant', 'system']
-          && incoming().content is string && incoming().content.size() <= 100000
-          && (incoming().fileName == null || (incoming().fileName is string && incoming().fileName.size() <= 256))
-          && (incoming().fileSize == null || incoming().fileSize is number)
-          && (incoming().fileType == null || (incoming().fileType is string && incoming().fileType.size() <= 128))
-          && incoming().createdAt == request.time;
+          && incoming().content is string && incoming().content.size() <= 100000;
           
-        // Messages are usually append-only, but support deleting a specific single chat message if needed
-        allow delete: if isSignedIn() && parentChatMatches();
+        // Support deleting/updating messages
+        allow update, delete: if isSignedIn() && parentChatMatches();
       }
     }
   }
