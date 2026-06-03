@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "user": {
+      "title": "User Profile",
+      "description": "User account and preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique Firebase Auth User ID" },
+        "email": { "type": "string", "description": "User email address" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "photoURL": { "type": "string", "description": "User profile avatar photo URL" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account registration timestamp" }
+      },
+      "required": ["uid", "email"]
+    },
+    "chat": {
+      "title": "Chat Session",
+      "description": "A conversation topic or thread created by a user",
+      "type": "object",
+      "properties": {
+        "chatId": { "type": "string", "description": "Unique identifier of the chat" },
+        "userId": { "type": "string", "description": "Owner userId who created this chat" },
+        "title": { "type": "string", "description": "User-facing title of the conversation thread" },
+        "model": { "type": "string", "description": "The AI model identifier selected for this conversation" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the thread was started" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "When the thread last had a message" }
+      },
+      "required": ["chatId", "userId", "title", "model"]
+    },
+    "message": {
+      "title": "Chat Message",
+      "description": "An individual message block within a conversation thread",
+      "type": "object",
+      "properties": {
+        "messageId": { "type": "string", "description": "Unique identifier of the message" },
+        "chatId": { "type": "string", "description": "The parent chat thread ID" },
+        "userId": { "type": "string", "description": "The user ID of the messager" },
+        "role": { "type": "string", "enum": ["user", "assistant", "system"], "description": "The conversational role" },
+        "content": { "type": "string", "description": "The markdown or text body of the message" },
+        "fileName": { "type": "string", "description": "Optional name of uploaded file associated with this message" },
+        "fileSize": { "type": "number", "description": "Optional size in bytes of uploaded file" },
+        "fileType": { "type": "string", "description": "Optional MIME type of uploaded file" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when this message was created" }
+      },
+      "required": ["messageId", "chatId", "userId", "role", "content"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "Users collection holding user profile and metadata"
+    },
+    "/chats/{chatId}": {
+      "schema": "chat",
+      "description": "User conversations metadata"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "message",
+      "description": "Messages subcollection for each specific conversation thread"
+    }
+  }
+}

@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 1. Global Safe Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. User Collection (PII Isolated to owner)
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) 
+        && incoming().uid == userId
+        && incoming().email is string
+        && incoming().email.size() <= 256;
+      allow update: if isOwner(userId)
+        && incoming().uid == userId
+        && incoming().email == existing().email // immutable email
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']);
+    }
+
+    // 3. Chats Collection
+    match /chats/{chatId} {
+      allow get: if isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isSignedIn()
+        && isValidId(chatId)
+        && incoming().chatId == chatId
+        && incoming().userId == request.auth.uid
+        && incoming().title is string && incoming().title.size() <= 200
+        && incoming().model is string && incoming().model.size() <= 100
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+        
+      allow update: if isSignedIn()
+        && existing().userId == request.auth.uid
+        && incoming().userId == request.auth.uid
+        && incoming().chatId == chatId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasAll(['updatedAt'])
+        && incoming().diff(existing()).affectedKeys().hasAny(['title', 'updatedAt']);
+        
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+
+      // 4. Messages sub-collection (Master Gate relation check to parent Chat)
+      match /messages/{messageId} {
+        // Must fetch parent chat to check ownership of the parent resource
+        function parentChatMatches() {
+          return get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+        }
+
+        allow get: if isSignedIn() && parentChatMatches();
+        allow list: if isSignedIn() && parentChatMatches();
+        
+        allow create: if isSignedIn()
+          && isValidId(messageId)
+          && parentChatMatches()
+          && incoming().messageId == messageId
+          && incoming().chatId == chatId
+          && incoming().userId == request.auth.uid
+          && incoming().role in ['user', 'assistant', 'system']
+          && incoming().content is string && incoming().content.size() <= 100000
+          && (incoming().fileName == null || (incoming().fileName is string && incoming().fileName.size() <= 256))
+          && (incoming().fileSize == null || incoming().fileSize is number)
+          && (incoming().fileType == null || (incoming().fileType is string && incoming().fileType.size() <= 128))
+          && incoming().createdAt == request.time;
+          
+        // Messages are usually append-only, but support deleting a specific single chat message if needed
+        allow delete: if isSignedIn() && parentChatMatches();
+      }
+    }
+  }
+}

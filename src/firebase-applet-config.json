@@ -1,0 +1,9 @@
+{
+  "apiKey": "AIzaSy_FAKE_KEY_FOR_LOCAL_COMPILATION_ONLY",
+  "authDomain": "next-ray-placeholder.firebaseapp.com",
+  "projectId": "next-ray-placeholder",
+  "storageBucket": "next-ray-placeholder.appspot.com",
+  "messagingSenderId": "123456789012",
+  "appId": "1:123456789012:web:abcdef1234567890",
+  "firestoreDatabaseId": "(default)"
+}
