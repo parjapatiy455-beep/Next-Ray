@@ -2,6 +2,15 @@ import { AIModel } from "../types";
 
 export const AVAILABLE_MODELS: AIModel[] = [
   {
+    id: "meta/llama-3.3-70b-instruct",
+    name: "Llama 3.3 70B",
+    provider: "NVIDIA",
+    description: "Meta's state-of-the-art 70B model hosted on NVIDIA NIM. Exceptional multilingual performance, structured explanations, coding mastery, and swift speeds.",
+    badge: "Flagship 3.3",
+    maxTokens: 4096,
+    isVision: false,
+  },
+  {
     id: "nvidia/llama-3.1-nemotron-70b-instruct",
     name: "Nemotron 3.1 70B",
     provider: "NVIDIA",
@@ -15,7 +24,7 @@ export const AVAILABLE_MODELS: AIModel[] = [
     name: "Llama 3.1 405B",
     provider: "NVIDIA",
     description: "Meta's flagship open LLM hosted by NVIDIA NIM. Massive reasoning, perfect for deep research, coding, logic trees, or complex summarization.",
-    badge: "Flagship Reasoning",
+    badge: "Maximum Reasoning",
     maxTokens: 4096,
     isVision: false,
   },
@@ -36,14 +45,5 @@ export const AVAILABLE_MODELS: AIModel[] = [
     badge: "Lightweight & Fast",
     maxTokens: 2048,
     isVision: false,
-  },
-  {
-    id: "gemini-3.5-flash",
-    name: "Gemini 3.5 Flash",
-    provider: "Google",
-    description: "Google's default high-performance lightweight model. Fully multimodal, supporting instant image analyses, OCR tasks, and rich contextual answers.",
-    badge: "Native Vision / Media",
-    maxTokens: 8192,
-    isVision: true,
   },
 ];

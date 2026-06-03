@@ -443,9 +443,7 @@ export default function App() {
     // 2. Start AI loading stream state
     setIsStreamLoading(true);
 
-    const activeModel = AVAILABLE_MODELS.find(m => m.id === config.modelId) || AVAILABLE_MODELS[0];
-    const isGemini = activeModel.provider === "Google";
-    const endpoint = isGemini ? "/api/chat/gemini" : "/api/chat/nvidia";
+    const endpoint = "/api/chat/nvidia";
 
     // Setup temporary assistant shell
     const assistantMessageId = makeId();
@@ -472,7 +470,7 @@ export default function App() {
           temperature: config.temperature,
           maxTokens: config.maxTokens,
           modelId: config.modelId,
-          customKey: isGemini ? undefined : customNvidiaKey
+          customKey: customNvidiaKey
         }),
       });
 
@@ -573,7 +571,7 @@ export default function App() {
   const activeModel = AVAILABLE_MODELS.find(m => m.id === config.modelId) || AVAILABLE_MODELS[0];
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-gray-50 text-gray-800">
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-50/50 text-slate-800">
       
       {/* Sidebar navigation */}
       <Sidebar
@@ -594,10 +592,10 @@ export default function App() {
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         
         {/* Navigation control header bar for responsive toggle & model selection */}
-        <div className="px-4 py-3.5 border-b border-gray-150 bg-white flex items-center gap-3 shadow-xs">
+        <div className="h-16 px-6 border-b border-slate-100 bg-white flex items-center gap-3 shadow-xs">
           <button
             onClick={() => setIsSidebarOpen(true)}
-            className="md:hidden p-2 rounded-xl text-gray-500 hover:text-gray-900 hover:bg-gray-150 transition-all border border-gray-100"
+            className="md:hidden p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-all border border-slate-200"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -611,9 +609,9 @@ export default function App() {
             {!user && (
               <button
                 onClick={handleLogin}
-                className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-xl text-xs font-semibold shadow transition-all active:scale-[0.98]"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 rounded-lg text-xs font-semibold shadow-xs transition-all active:scale-[0.98]"
               >
-                <LogIn className="h-3.5 w-3.5 text-cyan-400" />
+                <LogIn className="h-3.5 w-3.5 text-indigo-500" />
                 <span>Sync with Google</span>
               </button>
             )}
@@ -633,27 +631,27 @@ export default function App() {
             onQuickPrompt={(text) => handleSendMessage(text)}
           />
         ) : (
-          // Full-screen CTA Login overlay
-          <div className="flex-grow flex flex-col items-center justify-center p-6 bg-gradient-to-b from-gray-50 to-white">
-            <div className="max-w-md w-full p-8 bg-white border border-gray-150 rounded-3xl shadow-xl shadow-cyan-500/5 text-center space-y-6 animate-in zoom-in-95 duration-150">
-              <div className="mx-auto h-16 w-16 rounded-2xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20">
-                <Cpu className="h-8 w-8 animate-pulse" />
+          // Full-screen CTA Login overlay in light off-white slate style
+          <div className="flex-grow flex flex-col items-center justify-center p-6 bg-slate-50/30">
+            <div className="max-w-md w-full p-8 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-100 text-center space-y-6 animate-in zoom-in-95 duration-150">
+              <div className="mx-auto h-12 w-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm">
+                <Cpu className="h-6 w-6" />
               </div>
 
               <div className="space-y-2">
-                <h2 className="text-xl md:text-2xl font-black text-gray-900 tracking-tight font-sans">
-                  Welcome to Next Ray v2.5
+                <h2 className="text-xl font-bold text-slate-800 tracking-tight font-sans">
+                  Next Ray Space
                 </h2>
-                <p className="text-sm text-gray-500 font-normal leading-relaxed">
-                  Sign in using your Google account to initialize the AI model playground. All conversation history is preserved securely.
+                <p className="text-sm text-slate-500 font-normal leading-relaxed">
+                  Sign in with your Google account to initialize conversation paths with live NVIDIA cloud compute models in the workspace.
                 </p>
               </div>
 
               <button
                 onClick={handleLogin}
-                className="w-full flex items-center justify-center gap-2.5 py-3.5 px-5 bg-gray-900 hover:bg-gray-800 text-white font-semibold rounded-2xl transition-all shadow-md active:scale-[0.98]"
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-xs transition-colors shadow-xs active:scale-[0.98] cursor-pointer"
               >
-                <LogIn className="h-5 w-5 text-cyan-400" />
+                <LogIn className="h-4 w-4 text-indigo-400" />
                 <span>Authorize with Google Account</span>
               </button>
 
@@ -671,9 +669,9 @@ export default function App() {
                     localStorage.setItem("nextray_local_user", JSON.stringify(fakeUser));
                     setUser(fakeUser);
                   }}
-                  className="text-xs text-cyan-600 hover:text-cyan-700 font-bold underline transition-colors"
+                  className="text-xs text-indigo-600 hover:text-indigo-700 font-bold underline transition-colors cursor-pointer"
                 >
-                  Or enter Sandbox Guest developer mode instead
+                  Enter sandbox developer workspace
                 </button>
               </div>
             </div>

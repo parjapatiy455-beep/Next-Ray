@@ -115,7 +115,7 @@ export default function ChatArea({
       file.name.endsWith('.py');
 
     if (isImage) {
-      // If image, read as Data URL base64 for Gemini vision
+      // Read images as base64 for vision/multimodal models
       reader.onload = () => {
         setAttachedFile({
           name: file.name,
@@ -262,37 +262,37 @@ export default function ChatArea({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={`flex-1 flex flex-col h-full bg-white relative transition-all duration-150 ${
-        isDragging ? 'ring-4 ring-cyan-500/30 ring-inset bg-cyan-50/10' : ''
+        isDragging ? 'ring-4 ring-indigo-100 ring-inset bg-slate-50/50' : ''
       }`}
     >
       {/* Top Header Controls */}
-      <header className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-white z-10">
-        <div className="flex items-center gap-1.5 text-xs text-gray-500 font-mono">
-          <Clock className="h-3.5 w-3.5 text-cyan-500" />
-          <span>Active Session Config:</span>
-          <span className="font-semibold text-gray-800 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
+      <header className="h-16 border-b border-slate-100 flex items-center px-6 justify-between sticky top-0 bg-white/80 backdrop-blur-md z-10">
+        <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
+          <Clock className="h-3.5 w-3.5 text-indigo-500" />
+          <span>Active Session:</span>
+          <span className="font-semibold text-slate-600 bg-slate-55 px-2 py-0.5 rounded border border-slate-100">
             Temp: {config.temperature}
           </span>
-          <span className="font-semibold text-gray-800 bg-gray-50 px-2 py-0.5 rounded border border-gray-100 hidden sm:inline">
+          <span className="font-semibold text-slate-600 bg-slate-55 px-2 py-0.5 rounded border border-slate-100 hidden sm:inline">
             Max: {config.maxTokens} tokens
           </span>
         </div>
 
         <button 
           onClick={onOpenSettings}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 rounded-xl border border-gray-200 transition-all active:scale-[0.98]"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 rounded-lg border border-slate-200 transition-all active:scale-[0.98]"
         >
-          <Settings className="h-3.5 w-3.5 text-gray-500" />
+          <Settings className="h-3.5 w-3.5 text-slate-405" />
           <span>Options</span>
         </button>
       </header>
 
       {/* Model-specific Alert Banner if NVIDIA key is missing */}
       {activeModel.provider === 'NVIDIA' && !serverKeyConfigured && !localStorage.getItem('nextray_custom_nvidia_key') && (
-        <div className="bg-amber-50 border-b border-amber-100 px-5 py-2 flex items-center gap-2.5 text-xs text-amber-850">
+        <div className="bg-amber-50/70 border-b border-amber-100 px-6 py-2.5 flex items-center gap-2.5 text-xs text-amber-800">
           <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />
           <span>
-            You selected <strong>{activeModel.name} (NVIDIA)</strong>. Ensure an NVIDIA API Key is provided in the **Options** drawer or `.env` to prevent service errors.
+            Using <strong>{activeModel.name} (NVIDIA)</strong>. Ensure an NVIDIA API Key is provided in the **Options** drawer to prevent service errors.
           </span>
         </div>
       )}
@@ -300,48 +300,45 @@ export default function ChatArea({
       {/* Main Conversation Feed Area */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-6 md:px-8 space-y-6 scrollbar-thin scrollbar-thumb-gray-200"
+        className="flex-1 overflow-y-auto px-4 py-8 md:px-8 space-y-6 scrollbar-thin scrollbar-thumb-slate-200"
       >
         {messages.length === 0 ? (
-          // Standard ChatGPT Welcome Screen
-          <div className="max-w-2xl mx-auto py-10 md:py-16 space-y-8 select-none">
-            <div className="text-center space-y-3">
-              <div className="inline-flex h-14 w-14 rounded-2xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 items-center justify-center shadow-xl shadow-cyan-500/10 text-white animate-bounce">
-                <Sparkles className="h-7 w-7" />
+          // Clean Minimal Welcome Screen
+          <div className="max-w-2xl mx-auto py-12 md:py-20 space-y-10 select-none">
+            <div className="text-center space-y-4">
+              <div className="inline-flex h-12 w-12 rounded-xl bg-indigo-600 items-center justify-center text-white shadow-sm mb-2">
+                <Sparkles className="h-6 w-6" />
               </div>
-              <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-gray-900 font-sans">
-                Next Ray AI Playground
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-800 font-sans">
+                Next Ray
               </h2>
-              <p className="text-gray-500 max-w-md mx-auto text-sm leading-relaxed">
-                Unlock the parameters of NVIDIA's free LLMs and Google Gemini models in a single immersive chat interface.
+              <p className="text-slate-450 max-w-md mx-auto text-sm leading-relaxed">
+                Connect to live NVIDIA NIM cloud compute nodes in a polished, minimalist workspace.
               </p>
             </div>
 
             {/* Quick start Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {starterBento.map((item, idx) => (
                 <button
                   key={idx}
                   onClick={() => onQuickPrompt(item.prompt)}
-                  className={`p-4 rounded-2xl border border-gray-150/70 text-left transition-all ${item.color} group relative overflow-hidden`}
+                  className="p-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-left transition-all text-slate-700 hover:text-slate-900 shadow-xs relative group overflow-hidden"
                 >
-                  <h3 className="text-sm font-bold tracking-tight mb-1 flex items-center justify-between">
+                  <h3 className="text-sm font-bold tracking-tight text-slate-800 mb-1 flex items-center justify-between">
                     {item.title}
-                    <span className="text-xs opacity-0 group-hover:opacity-100 transition-opacity">➔</span>
+                    <span className="text-xs opacity-0 group-hover:opacity-100 transition-opacity text-slate-400">➔</span>
                   </h3>
-                  <p className="text-xs leading-relaxed opacity-85">
+                  <p className="text-xs leading-relaxed text-slate-500">
                     {item.desc}
                   </p>
-                  <div className="absolute right-3 bottom-2 opacity-5 scale-75 group-hover:scale-100 transition-all font-mono font-bold text-6xl">
-                    {idx + 1}
-                  </div>
                 </button>
               ))}
             </div>
 
-            <div className="p-4 rounded-xl bg-gray-50 border border-gray-100 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
-              <Paperclip className="h-3.5 w-3.5 text-gray-400" />
-              <span>Drag-and-drop code, CSV data, or image files below to analyze them instantly!</span>
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+              <Paperclip className="h-3.5 w-3.5 text-slate-400" />
+              <span>Drag-and-drop code, CSV, or image files anywhere to attach and analyze.</span>
             </div>
           </div>
         ) : (
@@ -361,27 +358,27 @@ export default function ChatArea({
                 >
                   {/* Left Avatar Column */}
                   {isAssistant && (
-                    <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-sm select-none flex-shrink-0 animate-in fade-in">
-                      R
+                    <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-indigo-600 shadow-xs select-none flex-shrink-0 animate-in fade-in">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                     </div>
                   )}
 
                   {/* Message Bubble Container */}
-                  <div className={`max-w-[85%] rounded-2xl px-4.5 py-3 space-y-2 border shadow-xs transition-all animate-in fade-in duration-200 ${
+                  <div className={`max-w-[80%] rounded-2xl px-5 py-3.5 space-y-3 transition-all animate-in fade-in duration-200 ${
                     isAssistant 
-                      ? 'bg-gray-50/50 border-gray-100 text-gray-800' 
-                      : 'bg-cyan-600 border-cyan-700 text-white shadow-md shadow-cyan-600/5'
+                      ? 'bg-slate-50/70 border border-slate-100 text-slate-800' 
+                      : 'bg-indigo-600 text-white shadow-xs'
                   }`}>
                     
                     {/* Attached file visual preview inside dialogue bubble */}
                     {msg.fileName && (
-                      <div className={`p-2 rounded-lg border flex items-center gap-2 mb-2 ${
+                      <div className={`p-2.5 rounded-lg border flex items-center gap-2.5 mb-2 ${
                         isAssistant 
-                          ? 'bg-white border-gray-100 text-gray-700' 
-                          : 'bg-cyan-700/60 border-cyan-700 text-white'
+                          ? 'bg-white border-slate-100 text-slate-700' 
+                          : 'bg-indigo-700/60 border-indigo-700/80 text-white'
                       }`}>
                         {msg.fileType?.startsWith('image/') ? (
-                          <div className="relative h-14 w-14 rounded overflow-hidden border bg-gray-50 flex-shrink-0 flex items-center justify-center">
+                          <div className="relative h-12 w-12 rounded overflow-hidden border border-slate-200 bg-slate-50 flex-shrink-0 flex items-center justify-center">
                             {/* Visual reference for image payload */}
                             <img 
                               src={msg.fileData || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100"} 
@@ -391,29 +388,29 @@ export default function ChatArea({
                             />
                           </div>
                         ) : (
-                          <div className="h-10 w-10 rounded bg-cyan-900/20 flex items-center justify-center text-xs flex-shrink-0">
+                          <div className="h-9 w-9 rounded bg-indigo-900/10 flex items-center justify-center text-xs flex-shrink-0">
                             {msg.fileName.endsWith('.csv') ? (
-                              <FileSpreadsheet className="h-5 w-5 text-emerald-400" />
+                              <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
                             ) : (
-                              <FileText className="h-5 w-5 text-cyan-300" />
+                              <FileText className="h-4 w-4 text-indigo-300" />
                             )}
                           </div>
                         )}
-                        <div className="flex-1 min-w-0 text-xs">
-                          <p className="font-semibold truncate uppercase tracking-tight">{msg.fileName}</p>
-                          <p className="opacity-70 font-mono text-[10px]">{msg.fileSize ? formatBytes(msg.fileSize) : 'Extracted context'}</p>
+                        <div className="flex-1 min-w-0 text-xs text-left">
+                          <p className="font-semibold truncate tracking-tight">{msg.fileName}</p>
+                          <p className="opacity-70 font-mono text-[9px]">{msg.fileSize ? formatBytes(msg.fileSize) : 'Extracted context'}</p>
                         </div>
                       </div>
                     )}
 
                     {/* Rendering of GPT core content markdown */}
-                    <div className="markdown-body prose max-w-none text-gray-800 leading-relaxed font-sans text-sm break-words">
+                    <div className={`markdown-body prose max-w-none leading-relaxed font-sans text-sm break-words ${isAssistant ? 'text-slate-800' : 'text-white'}`}>
                       {isAssistant ? (
-                        <div className="prose prose-slate prose-sm text-gray-7  70 font-sans leading-relaxed">
+                        <div className="prose prose-slate prose-sm text-slate-700 font-sans leading-relaxed">
                           <Markdown>{msg.content}</Markdown>
                         </div>
                       ) : (
-                        <p className="text-white whitespace-pre-wrap leading-relaxed select-text font-medium text-sm">
+                        <p className="text-white whitespace-pre-wrap leading-relaxed select-text font-normal text-sm">
                           {msg.content}
                         </p>
                       )}
@@ -421,13 +418,13 @@ export default function ChatArea({
 
                     {/* Assistant Metadata / Audio Utilities Row */}
                     {isAssistant && (
-                      <div className="flex items-center gap-3 pt-1 border-t border-gray-100 mt-2 text-xs text-gray-400 font-mono">
-                        <span className="text-[10px]">Active Model ID: <strong className="text-gray-600 font-sans uppercase text-[9px]">{currentModelId.split('/').pop()}</strong></span>
-                        <div className="h-3 w-px bg-gray-150" />
+                      <div className="flex items-center gap-3 pt-2 border-t border-slate-100 mt-2 text-xs text-slate-400 font-mono">
+                        <span className="text-[10px]">Model: <strong className="text-slate-500 font-sans uppercase text-[9px]">{currentModelId.split('/').pop()}</strong></span>
+                        <div className="h-3 w-px bg-slate-200" />
                         
                         <button
                           onClick={() => handleCopyText(msg.content, msg.messageId)}
-                          className="hover:text-cyan-600 flex items-center gap-1 transition-colors"
+                          className="hover:text-indigo-600 flex items-center gap-1 transition-colors"
                           title="Copy text block"
                         >
                           {copiedMessageId === msg.messageId ? (
@@ -445,8 +442,8 @@ export default function ChatArea({
 
                         <button
                           onClick={() => handleSpeakText(msg.content, msg.messageId)}
-                          className="hover:text-cyan-600 flex items-center gap-1 transition-colors"
-                          title="Listen to Narrative Speech"
+                          className="hover:text-indigo-600 flex items-center gap-1 transition-colors"
+                          title="Listen to Speech"
                         >
                           <Volume2 className={`h-3.5 w-3.5 ${isSpeakingId === msg.messageId ? 'text-indigo-500 animate-pulse font-bold' : ''}`} />
                           <span className={isSpeakingId === msg.messageId ? 'text-indigo-500 font-bold' : ''}>
@@ -463,16 +460,16 @@ export default function ChatArea({
             {/* SSE Stream loader bubble */}
             {isStreamLoading && (
               <div className="flex gap-4 animate-pulse">
-                <div className="h-8 w-8 rounded-lg bg-cyan-600 flex items-center justify-center text-white text-xs font-bold leading-none select-none flex-shrink-0 shadow">
-                  R
+                <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-indigo-600 text-xs font-bold shrink-0 shadow-xs">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                 </div>
-                <div className="max-w-[85%] rounded-2xl bg-gray-50 border border-gray-100 px-4 py-3 flex items-center gap-2 text-gray-500 text-sm">
+                <div className="max-w-[80%] rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3 flex items-center gap-2 text-slate-400 text-sm">
                   <div className="flex space-x-1">
-                    <span className="h-2 w-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="h-2 w-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="h-2 w-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <span className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
-                  <span className="text-xs font-medium font-mono text-gray-400 ml-1">Streaming active intelligence response...</span>
+                  <span className="text-xs font-mono text-slate-400 ml-1">Streaming active intelligence response...</span>
                 </div>
               </div>
             )}
@@ -482,36 +479,36 @@ export default function ChatArea({
 
       {/* Floating Drag & Drop Banner indicator */}
       {isDragging && (
-        <div className="absolute inset-0 bg-cyan-50/70 border-4 border-dashed border-cyan-500 backdrop-blur-xs flex flex-col items-center justify-center gap-2 shadow z-20 transition-all">
-          <Paperclip className="h-10 w-10 text-cyan-600 animate-bounce" />
-          <p className="text-lg font-bold text-cyan-900 leading-none">Drop file here to upload</p>
-          <p className="text-xs text-cyan-700 leading-none">Allows image OCR analysis, text conversions, and CSV integrations</p>
+        <div className="absolute inset-0 bg-white/95 border-2 border-slate-200 flex flex-col items-center justify-center gap-3 shadow z-20 transition-all">
+          <Paperclip className="h-9 w-9 text-indigo-500 animate-bounce" />
+          <p className="text-lg font-bold text-slate-800 leading-none">Drop context file to attach</p>
+          <p className="text-xs text-slate-400 leading-none">Supports code snippets, datasets, data tables, and image files</p>
         </div>
       )}
 
       {/* Input Message Builder Section */}
-      <footer className="p-4 md:p-6 border-t border-gray-100 bg-white">
+      <footer className="p-6 md:p-8 border-t border-slate-100 bg-white whitespace-nowrap">
         <div className="max-w-3xl mx-auto space-y-3">
           
           {/* Active upload preview handle */}
           {attachedFile && (
-            <div className="p-2.5 rounded-xl border border-gray-200 bg-gray-50/80 flex items-center justify-between text-xs text-gray-800 shadow-xs animate-in slide-in-from-bottom-2 duration-150">
+            <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/80 flex items-center justify-between text-xs text-slate-800 shadow-xs animate-in slide-in-from-bottom-2 duration-150">
               <div className="flex items-center gap-2">
                 {attachedFile.type.startsWith('image/') ? (
                   <img 
                     src={attachedFile.dataUrl} 
                     alt="upload preview" 
-                    className="h-8 w-8 object-cover rounded border bg-white"
+                    className="h-8 w-8 object-cover rounded border border-slate-250 bg-white"
                   />
                 ) : (
-                  <div className="h-8 w-8 rounded bg-gray-100/80 flex items-center justify-center text-xs text-cyan-600 flex-shrink-0 font-bold border border-gray-200">
+                  <div className="h-8 w-8 rounded bg-slate-100/80 flex items-center justify-center text-xs text-indigo-600 flex-shrink-0 font-bold border border-slate-200">
                     TXT
                   </div>
                 )}
-                <div>
-                  <p className="font-semibold text-gray-900 max-w-[200px] truncate">{attachedFile.name}</p>
-                  <p className="text-[10px] text-gray-400 font-mono">
-                    {formatBytes(attachedFile.size)} ({attachedFile.isTextExtract ? 'Extracted text injection' : 'Base64 Native Media'})
+                <div className="text-left">
+                  <p className="font-semibold text-slate-800 max-w-[200px] truncate">{attachedFile.name}</p>
+                  <p className="text-[10px] text-slate-400 font-mono">
+                    {formatBytes(attachedFile.size)} ({attachedFile.isTextExtract ? 'Extracted text injection' : 'Data Payload'})
                   </p>
                 </div>
               </div>
@@ -519,55 +516,64 @@ export default function ChatArea({
               <button
                 type="button"
                 onClick={() => setAttachedFile(null)}
-                className="p-1 px-1.5 hover:bg-gray-200 text-gray-400 hover:text-gray-600 rounded-lg transition-all"
+                className="p-1 px-1.5 hover:bg-slate-200 text-slate-400 hover:text-slate-650 rounded-lg transition-all"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex gap-2 relative">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="px-3.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-400 hover:text-gray-650 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center shadow-xs"
-              title="Attach File (Images/Code/CSV)"
-            >
-              <Paperclip className="h-5 w-5 text-gray-500" />
-            </button>
-            
-            <input 
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/*,text/*,.csv,.json,.ts,.js,.md,.py"
-              className="hidden"
-            />
+          {/* Clean Minimalism Absolute Custom Search Input Design template */}
+          <div className="relative group w-full">
+            <form onSubmit={handleSubmit} className="relative flex items-center w-full">
+              {/* Left attachment clip button absolute inside input */}
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 rounded-md transition-colors"
+                  title="Attach File (Images/Code/CSV)"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </button>
+              </div>
 
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder={
-                attachedFile 
-                  ? "Describe what you would like the AI model to do with this file..." 
-                  : `Message ${activeModel.name}...`
-              }
-              disabled={isStreamLoading}
-              className="flex-grow p-3 px-4 border border-gray-200 rounded-xl bg-gray-50/20 text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-all font-sans placeholder-gray-400 font-normal shadow-xs"
-            />
+              <input 
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*,text/*,.csv,.json,.ts,.js,.md,.py"
+                className="hidden"
+              />
 
-            <button
-              type="submit"
-              disabled={isStreamLoading || (!inputText.trim() && !attachedFile)}
-              className="p-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-40 disabled:from-gray-400 disabled:to-gray-400 text-white rounded-xl transition-all shadow-md flex items-center justify-center min-w-[50px] active:scale-[0.98]"
-            >
-              <Send className="h-4 w-4 font-bold" />
-            </button>
-          </form>
+              <input
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder={
+                  attachedFile 
+                    ? "Explain what to analyze in this attachment..." 
+                    : "Ask Next Ray anything..."
+                }
+                disabled={isStreamLoading}
+                className="w-full pl-14 pr-16 py-4 bg-white border-2 border-slate-100 rounded-2xl text-sm focus:outline-none focus:border-indigo-200 transition-all shadow-lg shadow-slate-100 text-slate-800"
+              />
 
-          <p className="text-[10px] text-gray-400 text-center leading-none font-mono">
-            Next Ray AI can produce incorrect outcomes. Confirm critical logical parameters.
+              {/* Right submit absolute button inside input */}
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <button
+                  type="submit"
+                  disabled={isStreamLoading || (!inputText.trim() && !attachedFile)}
+                  className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-slate-800 disabled:opacity-40 disabled:bg-slate-200 disabled:text-slate-400 transition-colors shadow-md flex items-center justify-center cursor-pointer"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <p className="text-center text-[10px] text-slate-400 mt-4 leading-none font-sans">
+            Next Ray utilizes official cloud backends. Results can vary by node. Model status: <span className="text-green-500 font-bold">ONLINE</span>
           </p>
         </div>
       </footer>
