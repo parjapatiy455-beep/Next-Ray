@@ -265,6 +265,18 @@ Layouts:
     return 'nr_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
   };
 
+  const createSlug = (title: string, id: string) => {
+    const sanitized = title
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '')     // remove non-alphanumeric except hyphen and space
+      .replace(/[\s_]+/g, '-')       // replace spaces or underscore with single hyphen
+      .replace(/^-+|-+$/g, '');      // trim leading/trailing hyphens
+    
+    const shortId = id.substring(id.length - 6);
+    return sanitized ? `${sanitized}-${shortId}` : shortId;
+  };
+
   // 1. Fetch server config to verify cloud status of keys
   useEffect(() => {
     const fetchServerConfig = async () => {
@@ -345,9 +357,23 @@ Layouts:
         const d2 = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
         return d2 - d1;
       });
-      setSessions(loaded);
-      if (loaded.length > 0 && !currentSessionId) {
-        setCurrentSessionId(loaded[0].chatId);
+      const loadedWithSlugs = loaded.map(s => {
+        if (!s.slug) {
+          s.slug = createSlug(s.title, s.chatId);
+        }
+        return s;
+      });
+      setSessions(loadedWithSlugs);
+      if (loadedWithSlugs.length > 0 && !currentSessionId) {
+        const hash = window.location.hash;
+        const slugStr = hash.startsWith('#/chat/') ? hash.replace('#/chat/', '') : '';
+        let targetId = null;
+        if (slugStr) {
+          const found = loadedWithSlugs.find(s => s.slug === slugStr || s.chatId === slugStr);
+          if (found) targetId = found.chatId;
+        }
+        if (!targetId) targetId = loadedWithSlugs[0].chatId;
+        setCurrentSessionId(targetId);
       }
     } else {
       // Firestore Live Query without orderBy to completely bypass the need for composite indexes!
@@ -376,9 +402,23 @@ Layouts:
         // Sort descending by updatedAt in memory
         loaded.sort((a, b) => parseDate(b.updatedAt) - parseDate(a.updatedAt));
 
-        setSessions(loaded);
-        if (loaded.length > 0 && !currentSessionId) {
-          setCurrentSessionId(loaded[0].chatId);
+        const loadedWithSlugs = loaded.map(s => {
+          if (!s.slug) {
+            s.slug = createSlug(s.title, s.chatId);
+          }
+          return s;
+        });
+        setSessions(loadedWithSlugs);
+        if (loadedWithSlugs.length > 0 && !currentSessionId) {
+          const hash = window.location.hash;
+          const slugStr = hash.startsWith('#/chat/') ? hash.replace('#/chat/', '') : '';
+          let targetId = null;
+          if (slugStr) {
+            const found = loadedWithSlugs.find(s => s.slug === slugStr || s.chatId === slugStr);
+            if (found) targetId = found.chatId;
+          }
+          if (!targetId) targetId = loadedWithSlugs[0].chatId;
+          setCurrentSessionId(targetId);
         }
       }, (error) => {
         handleFirestoreError(error, OperationType.LIST, path);
@@ -387,6 +427,44 @@ Layouts:
       return () => unsubscribe();
     }
   }, [user]);
+
+  // 3b. Slug Hash Synchronization
+  // Listener for slug hash changes in URL bar (Browser -> React state)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (hash.startsWith('#/chat/')) {
+        const slugStr = hash.replace('#/chat/', '');
+        if (slugStr) {
+          const found = sessions.find(s => s.slug === slugStr || s.chatId === slugStr);
+          if (found && found.chatId !== currentSessionId) {
+            setCurrentSessionId(found.chatId);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [sessions, currentSessionId]);
+
+  // Synchronizer from React state -> URL Bar Hash
+  useEffect(() => {
+    if (currentSessionId && sessions.length > 0) {
+      const active = sessions.find(s => s.chatId === currentSessionId);
+      if (active) {
+        const activeSlug = active.slug || active.chatId;
+        const targetHash = `#/chat/${activeSlug}`;
+        if (window.location.hash !== targetHash) {
+          window.location.hash = targetHash;
+        }
+      }
+    } else if (!currentSessionId) {
+      if (window.location.hash.startsWith('#/chat/')) {
+        window.location.hash = '';
+      }
+    }
+  }, [currentSessionId, sessions]);
 
   // 4. Sync Messages belonging to selected Conversation Thread
   useEffect(() => {
@@ -548,6 +626,7 @@ Layouts:
       model: config.modelId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      slug: createSlug('New Conversation Thread', newId)
     };
 
     if (isLocalFallback) {
@@ -643,13 +722,15 @@ Layouts:
     // 1. If user doesn't have an active thread, auto-create one first! (Just like ChatGPT)
     if (!activeId) {
       const newId = makeId();
+      const sTitle = text.substring(0, 36) + (text.length > 36 ? '...' : '');
       const newSession: ChatSession = {
         chatId: newId,
         userId: user.uid,
-        title: text.substring(0, 36) + (text.length > 36 ? '...' : ''),
+        title: sTitle,
         model: config.modelId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        slug: createSlug(sTitle, newId)
       };
 
       activeId = newId;
@@ -718,8 +799,9 @@ Layouts:
     const thread = sessions.find(s => s.chatId === activeId);
     if (thread && thread.title === "New Conversation Thread") {
       const parsedTitle = text.length > 36 ? text.substring(0, 35) + "..." : text;
+      const newSlug = createSlug(parsedTitle, activeId);
       const updatedSess = sessions.map(s => {
-        if (s.chatId === activeId) return { ...s, title: parsedTitle };
+        if (s.chatId === activeId) return { ...s, title: parsedTitle, slug: newSlug };
         return s;
       });
       setSessions(updatedSess);
@@ -727,7 +809,7 @@ Layouts:
       if (isLocalFallback) {
         localStorage.setItem(`nextray_sessions_${user.uid}`, JSON.stringify(updatedSess));
       } else {
-        await setDoc(doc(db, "chats", activeId), { title: parsedTitle }, { merge: true });
+        await setDoc(doc(db, "chats", activeId), { title: parsedTitle, slug: newSlug }, { merge: true });
       }
     }
 

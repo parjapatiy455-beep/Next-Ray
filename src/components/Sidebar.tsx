@@ -140,12 +140,14 @@ export default function Sidebar({
                       : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  <button
-                    onClick={() => {
+                  <a
+                    href={`#/chat/${session.slug || session.chatId}`}
+                    onClick={(e) => {
+                      e.preventDefault();
                       onSelectSession(session.chatId);
                       setIsSidebarOpen(false); // Close mobile drawer on selection
                     }}
-                    className="flex-1 flex flex-col justify-start items-start p-2.5 pr-10 text-left overflow-hidden rounded-lg"
+                    className="flex-1 flex flex-col justify-start items-start p-2.5 pr-10 text-left overflow-hidden rounded-lg cursor-pointer"
                   >
                     <span className="truncate w-full text-sm block">
                       {session.title || "Empty conversation"}
@@ -153,7 +155,7 @@ export default function Sidebar({
                     <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
                       {getModelLabel(session.model)}
                     </span>
-                  </button>
+                  </a>
 
                   <button
                     onClick={(e) => {

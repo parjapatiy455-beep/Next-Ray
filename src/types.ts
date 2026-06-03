@@ -13,6 +13,7 @@ export interface ChatSession {
   model: string;
   createdAt: string;
   updatedAt: string;
+  slug?: string;
 }
 
 export interface MessageFile {
