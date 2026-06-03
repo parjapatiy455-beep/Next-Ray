@@ -439,11 +439,58 @@ export default function InteractiveWorkbench({
   const [editMetricValue, setEditMetricValue] = useState('');
   const [editMetricLabel, setEditMetricLabel] = useState('');
   const [editQuoteAuthor, setEditQuoteAuthor] = useState('');
+  const [aiEditPrompt, setAiEditPrompt] = useState('');
 
-  // Synchronize dynamic preview run on load
+  // Synchronize dynamic preview run on load & capture AI-generated updates
   useEffect(() => {
     runCodeInSandbox();
+
+    const handleSlideshowUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && Array.isArray(customEvent.detail.slides)) {
+        setCurrentDeckName(customEvent.detail.name || "AI Generated presentation");
+        setSlides(customEvent.detail.slides);
+        setCurrentSlideIndex(0);
+        setActiveTab('slide-builder');
+      }
+    };
+
+    const handleHtmlUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && typeof customEvent.detail.code === 'string') {
+        setSandboxCode(customEvent.detail.code);
+        setSrcDoc(customEvent.detail.code);
+        setActiveTab('html-sandbox');
+      }
+    };
+
+    window.addEventListener('update-slideshow-deck', handleSlideshowUpdate);
+    window.addEventListener('update-html-sandbox', handleHtmlUpdate);
+    return () => {
+      window.removeEventListener('update-slideshow-deck', handleSlideshowUpdate);
+      window.removeEventListener('update-html-sandbox', handleHtmlUpdate);
+    };
   }, []);
+
+  // Listen for keyboard controls inside fullscreen slide view
+  useEffect(() => {
+    if (!isFullscreenSlide) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsFullscreenSlide(false);
+      } else if (e.key === 'ArrowRight' || e.key === ' ') {
+        if (currentSlideIndex < slides.length - 1) {
+          setCurrentSlideIndex(prev => prev + 1);
+        }
+      } else if (e.key === 'ArrowLeft') {
+        if (currentSlideIndex > 0) {
+          setCurrentSlideIndex(prev => prev - 1);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreenSlide, currentSlideIndex, slides.length]);
 
   // Update edit form values when selected slide changes
   useEffect(() => {
@@ -484,6 +531,228 @@ export default function InteractiveWorkbench({
     setCurrentDeckName(deck.name);
     setSlides(deck.slides);
     setCurrentSlideIndex(0);
+  };
+
+  const handleDownloadDeckAsJson = () => {
+    const deckObj = {
+      type: 'slideshow_deck',
+      name: currentDeckName,
+      slides: slides
+    };
+    const blob = new Blob([JSON.stringify(deckObj, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentDeckName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_slides.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleDownloadDeckAsHtml = () => {
+    const htmlStyles = `
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        background-color: #020617;
+        color: #f8fafc;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        overflow: hidden;
+      }
+      .slide-container {
+        width: 90%;
+        max-width: 960px;
+        aspect-ratio: 16/9;
+        background-color: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 24px;
+        box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+        padding: 48px;
+        display: none;
+        flex-direction: column;
+        justify-content: space-between;
+        position: relative;
+        box-sizing: border-box;
+      }
+      .slide-container.active {
+        display: flex;
+      }
+      .btn {
+        background-color: #1e293b;
+        border: 1px solid #334155;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 13px;
+        transition: all 0.15s;
+      }
+      .btn:hover {
+        background-color: #334155;
+      }
+      .btn:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+      }
+    `;
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${currentDeckName}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>${htmlStyles}</style>
+</head>
+<body>
+  <div class="mb-4 text-xs font-mono text-slate-500 uppercase tracking-widest">${currentDeckName}</div>
+
+  ${slides.map((slide, idx) => {
+    return `
+    <div id="slide-${idx}" class="slide-container ${idx === 0 ? 'active' : ''} bg-slate-900 border border-slate-800 p-12 rounded-3xl w-full max-w-4xl aspect-[16/9] shadow-2xl flex flex-col justify-between">
+      <div class="text-[10px] uppercase font-mono opacity-40">Slide ${idx + 1} of ${slides.length}</div>
+      
+      <div class="my-auto flex-1 flex flex-col justify-center">
+        ${slide.layout === 'title' ? `
+          <div class="text-center space-y-4">
+            <h1 class="text-4xl font-extrabold uppercase text-emerald-400 tracking-tight">${slide.title}</h1>
+            <p class="text-slate-400 text-lg">${slide.subtitle}</p>
+          </div>
+        ` : slide.layout === 'quote' ? `
+          <div class="text-center italic text-xl px-12 leading-relaxed text-indigo-200">
+            "${slide.title}"
+            <div class="text-xs font-mono text-emerald-400 tracking-wide uppercase mt-4 not-italic">${slide.quoteAuthor || ''}</div>
+          </div>
+        ` : slide.layout === 'metrics' ? `
+          <div class="grid grid-cols-5 gap-8 items-center">
+            <div class="col-span-2 text-center border-r border-white/10 pr-4">
+              <div class="text-5xl font-black text-emerald-400 leading-none">${slide.metricValue || ''}</div>
+              <div class="text-[10px] font-mono uppercase text-slate-400 mt-2">${slide.metricLabel || ''}</div>
+            </div>
+            <div class="col-span-3 text-left">
+              <h2 class="text-2xl font-bold uppercase tracking-tight text-white">${slide.title}</h2>
+              <p class="text-slate-400 text-sm mt-2 leading-relaxed">${slide.subtitle}</p>
+            </div>
+          </div>
+        ` : `
+          <div class="grid grid-cols-2 gap-8 items-start">
+            <div class="text-left space-y-3">
+              <h2 class="text-2xl font-black uppercase text-teal-300 leading-snug">${slide.title}</h2>
+              <p class="text-slate-400 text-sm">${slide.subtitle}</p>
+            </div>
+            <ul class="text-left space-y-3 bg-white/[0.02] p-4 rounded-2xl border border-white/[0.04]">
+              ${slide.bullets.map(bullet => `
+                <li class="flex gap-2 text-xs text-slate-300">
+                  <span class="text-emerald-400">•</span>
+                  <span>${bullet}</span>
+                </li>
+              `).join('')}
+            </ul>
+          </div>
+        `}
+      </div>
+
+      <div class="flex justify-between items-center text-[10px] opacity-35 border-t border-white/10 pt-4">
+        <span>Generated with NextRay Systems</span>
+        <span class="font-mono">Node Index Reference: 00${idx + 1}</span>
+      </div>
+    </div>
+    `;
+  }).join('')}
+
+  <div class="controls mt-8 flex gap-4 select-none">
+    <button onclick="prevSlide()" class="btn">Previous</button>
+    <span class="text-sm font-mono self-center text-slate-400" id="indicator">Slide 1 of ${slides.length}</span>
+    <button onclick="nextSlide()" class="btn">Next</button>
+    <button onclick="toggleFullscreen()" class="btn">Fullscreen Present</button>
+  </div>
+
+  <script>
+    let currentSlide = 0;
+    const totalSlides = ${slides.length};
+
+    function showSlide(idx) {
+      document.querySelectorAll('.slide-container').forEach(el => el.classList.remove('active'));
+      const activeEl = document.getElementById('slide-' + idx);
+      if (activeEl) {
+        activeEl.classList.add('active');
+        currentSlide = idx;
+        document.getElementById('indicator').textContent = 'Slide ' + (idx + 1) + ' of ' + totalSlides;
+      }
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        showSlide(currentSlide + 1);
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        showSlide(currentSlide - 1);
+      }
+    }
+
+    function toggleFullscreen() {
+      const activeSlideEl = document.getElementById('slide-' + currentSlide);
+      if (activeSlideEl.requestFullscreen) {
+        activeSlideEl.requestFullscreen();
+      } else if (activeSlideEl.webkitRequestFullscreen) {
+        activeSlideEl.webkitRequestFullscreen();
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') {
+        nextSlide();
+      } else if (e.key === 'ArrowLeft') {
+        prevSlide();
+      }
+    });
+  </script>
+</body>
+</html>`;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentDeckName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_presentation.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleAiEdit = () => {
+    if (!aiEditPrompt.trim()) return;
+    const activeSlide = slides[currentSlideIndex];
+    const prompt = `Can you edit or improve this slide from our presentation?
+Current Slide Index: ${currentSlideIndex}
+Current Slide Title: "${activeSlide?.title || ''}"
+Current Slide Subtitle: "${activeSlide?.subtitle || ''}"
+Current Slide Layout: "${activeSlide?.layout || ''}"
+Current Slide Bullets: ${JSON.stringify(activeSlide?.bullets || [])}
+
+User Change Directives: "${aiEditPrompt}"
+
+Please re-generate the entire slide deck incorporating these exact directives into the slide at index ${currentSlideIndex}. Respond to me in Chat with your response AND ALWAYS embed the complete JSON slide deck inside your response formatted inside a \`\`\`json markdown block, looking like this:
+\`\`\`json
+{
+  "type": "slideshow_deck",
+  "name": "${currentDeckName}",
+  "slides": [
+    ...
+  ]
+}
+\`\`\``;
+    onPasteToChat(prompt);
+    setAiEditPrompt('');
   };
 
   const handleUpdateSlide = () => {
@@ -826,45 +1095,106 @@ export default function InteractiveWorkbench({
                 </div>
 
                 {/* Slideshow Player Controllers Grid */}
-                <div className="flex justify-between items-center bg-white p-3 rounded-2xl border border-slate-205 shadow-xs">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        const nextidx = (activeThemeIndex + 1) % ACCENT_THEMES.length;
-                        setActiveThemeIndex(nextidx);
-                      }}
-                      className="p-2 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-lg text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                      title="Cycles background projection themes"
-                    >
-                      <Palette className="h-3.5 w-3.5" />
-                      <span>Switch Theme</span>
-                    </button>
+                <div className="flex flex-col gap-2.5 bg-white p-3.5 rounded-2xl border border-slate-205 shadow-xs">
+                  <div className="flex justify-between items-center w-full">
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        onClick={() => {
+                          const nextidx = (activeThemeIndex + 1) % ACCENT_THEMES.length;
+                          setActiveThemeIndex(nextidx);
+                        }}
+                        className="p-1 px-2 hover:bg-slate-50 text-slate-500 rounded border border-slate-200 text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                        title="Cycles background projection themes"
+                      >
+                        <Palette className="h-3.5 w-3.5" />
+                        <span>Switch Theme</span>
+                      </button>
+                      <button
+                        onClick={() => setIsFullscreenSlide(true)}
+                        className="p-1 px-2.5 bg-slate-900 border border-slate-900 text-emerald-400 hover:text-emerald-300 rounded text-[10px] font-extrabold inline-flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                        title="Open Fullscreen Presenter Mode"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5" />
+                        <span>View Fullscreen</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        disabled={currentSlideIndex === 0}
+                        onClick={() => setCurrentSlideIndex(currentSlideIndex - 1)}
+                        className="p-1 px-2 border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 rounded transition-colors cursor-pointer"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="text-[11px] font-bold font-mono px-2">0{currentSlideIndex + 1} / 0{slides.length}</span>
+                      <button
+                        disabled={currentSlideIndex === slides.length - 1}
+                        onClick={() => setCurrentSlideIndex(currentSlideIndex + 1)}
+                        className="p-1 px-2 border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 rounded transition-colors cursor-pointer"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 w-full">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDownloadDeckAsHtml}
+                        className="p-1 px-2 border border-slate-200 hover:bg-slate-50 text-slate-650 hover:text-slate-900 rounded text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                        title="Download standard standalone presentation page"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        <span>Download HTML Deck</span>
+                      </button>
+                      <button
+                        onClick={handleDownloadDeckAsJson}
+                        className="p-1 px-2 border border-slate-200 hover:bg-slate-50 text-slate-650 hover:text-slate-900 rounded text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                        title="Download JSON schema deck representation"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        <span>Download JSON</span>
+                      </button>
+                    </div>
+
                     <button
                       onClick={() => {
                         onPasteToChat(`Here is our Business PPT presentation plan:\n\n${slides.map((s, idx) => `**Slide ${idx+1}: ${s.title}**\nSubtitle: ${s.subtitle}\nBullets:\n${s.bullets.map(b => `- ${b}`).join('\n')}`).join('\n\n')}`);
                       }}
-                      className="p-2 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-lg text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                      className="p-1 px-2 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-slate-800 rounded text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer"
                       title="Send slides text representation to prompt AI next"
                     >
-                      <span>Forward to Chat AI</span>
+                      <span>Forward to AI Chat</span>
                     </button>
                   </div>
+                </div>
 
-                  <div className="flex items-center gap-1">
+                {/* SLIDE VISUAL INTELLIGENCE: QUICK AI EDIT BOARD */}
+                <div className="bg-gradient-to-r from-emerald-50/40 to-teal-50/40 rounded-2xl border border-emerald-100 p-4 space-y-2 text-left">
+                  <div className="flex items-center gap-1.5 text-emerald-800 text-xs font-bold">
+                    <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>Quick Edit Slide with AI</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-normal">
+                    Enter directives to customize this specific slide (e.g., "Add a metric for user experience rating 98%" or "Add bullets describing security protocols"). Let AI modify it immediately!
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={aiEditPrompt}
+                      onChange={(e) => setAiEditPrompt(e.target.value)}
+                      placeholder="e.g. Change layout to metrics and add bullet details..."
+                      className="flex-1 bg-white px-3 py-1.5 border border-emerald-200/60 rounded-xl text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-emerald-400"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAiEdit();
+                      }}
+                    />
                     <button
-                      disabled={currentSlideIndex === 0}
-                      onClick={() => setCurrentSlideIndex(currentSlideIndex - 1)}
-                      className="p-1 px-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 rounded-lg transition-colors cursor-pointer"
+                      onClick={handleAiEdit}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl px-4 py-1.5 text-xs font-bold transition-all active:scale-[0.97] cursor-pointer"
                     >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <span className="text-xs font-bold font-mono px-3">Slide 0{currentSlideIndex + 1}</span>
-                    <button
-                      disabled={currentSlideIndex === slides.length - 1}
-                      onClick={() => setCurrentSlideIndex(currentSlideIndex + 1)}
-                      className="p-1 px-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-40 rounded-lg transition-colors cursor-pointer"
-                    >
-                      <ChevronRight className="h-4 w-4" />
+                      Apply AI Edit
                     </button>
                   </div>
                 </div>
@@ -1053,6 +1383,119 @@ export default function InteractiveWorkbench({
         )}
 
       </div>
+
+      {/* FULLSCREEN PRESENTATION MODE OVERLAY */}
+      {isFullscreenSlide && (
+        <div className="fixed inset-0 z-[9999] bg-slate-950 flex flex-col justify-between p-6 md:p-12 text-slate-100 select-text font-sans">
+          {/* Background Ambient Orbs */}
+          <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-500/5 blur-[120px] pointer-events-none" />
+          <div className="absolute bottom-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/5 blur-[120px] pointer-events-none" />
+
+          {/* Fullscreen Header */}
+          <header className="flex justify-between items-center border-b border-white/[0.08] pb-4 z-10 select-none">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <div className="text-sm font-black tracking-tight uppercase bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent">
+                {currentDeckName}
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-4 text-xs">
+              <span className="text-slate-500 font-mono">Presenting Slide {currentSlideIndex + 1} of {slides.length}</span>
+              <button
+                onClick={() => setIsFullscreenSlide(false)}
+                className="bg-white/10 hover:bg-white/15 text-white active:scale-95 px-3.5 py-1.5 rounded-xl font-bold tracking-wide uppercase transition-all flex items-center gap-1.5 cursor-pointer border border-white/5"
+                title="Press Esc to exit presenter"
+              >
+                <Minimize2 className="h-3.5 w-3.5" />
+                <span>Exit Presenter</span>
+              </button>
+            </div>
+          </header>
+
+          {/* Large Projection Screen */}
+          <div className="flex-1 flex flex-col justify-center max-w-5xl mx-auto w-full py-8 md:py-16">
+            {slides[currentSlideIndex]?.layout === 'title' ? (
+              <div className="text-center space-y-6">
+                <span className="inline-block h-1.5 w-20 bg-emerald-400 rounded-full mb-2" />
+                <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight leading-none uppercase bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+                  {slides[currentSlideIndex].title}
+                </h1>
+                <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
+                  {slides[currentSlideIndex].subtitle}
+                </p>
+              </div>
+            ) : slides[currentSlideIndex]?.layout === 'quote' ? (
+              <div className="text-center max-w-4xl mx-auto space-y-6">
+                <p className="text-2xl md:text-4xl italic font-serif leading-relaxed text-slate-105">
+                  "{slides[currentSlideIndex].title}"
+                </p>
+                <p className="text-sm md:text-base font-mono tracking-widest uppercase text-emerald-400 font-bold">
+                  {slides[currentSlideIndex].quoteAuthor || "- Author Profile"}
+                </p>
+              </div>
+            ) : slides[currentSlideIndex]?.layout === 'metrics' ? (
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-8 items-center">
+                <div className="md:col-span-2 text-center md:text-left py-4 border-r border-white/5 pr-4">
+                  <p className="text-6xl md:text-8xl font-black bg-gradient-to-tr from-emerald-400 to-teal-300 bg-clip-text text-transparent tracking-tighter">
+                    {slides[currentSlideIndex].metricValue || "100%"}
+                  </p>
+                  <p className="text-xs font-mono uppercase tracking-widest text-emerald-300 mt-2">
+                    {slides[currentSlideIndex].metricLabel || "Metric Label Reference"}
+                  </p>
+                </div>
+                <div className="md:col-span-3 text-left space-y-4">
+                  <h2 className="text-2xl md:text-4xl font-bold uppercase tracking-tight text-white">{slides[currentSlideIndex].title}</h2>
+                  <p className="text-sm md:text-base text-slate-400 leading-relaxed">{slides[currentSlideIndex].subtitle}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
+                <div className="text-left space-y-4">
+                  <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tight text-white leading-tight">
+                    {slides[currentSlideIndex]?.title}
+                  </h2>
+                  <p className="text-sm md:text-base text-slate-400 leading-relaxed">
+                    {slides[currentSlideIndex]?.subtitle}
+                  </p>
+                </div>
+
+                <ul className="text-left space-y-4 bg-white/[0.02] p-8 rounded-3xl border border-white/[0.04]">
+                  {slides[currentSlideIndex]?.bullets.map((bullet, bidx) => (
+                    <li key={bidx} className="flex gap-3 text-sm md:text-base leading-relaxed text-slate-300 items-start">
+                      <span className="h-2 w-2 bg-emerald-400 rounded-full mt-2 shrink-0" />
+                      <span>{bullet}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Fullscreen Navigation Footer Bar */}
+          <footer className="flex justify-between items-center border-t border-white/[0.08] pt-6 z-10 select-none">
+            <span className="text-[11px] text-slate-650 uppercase tracking-widest font-mono">Presenting Mode • Use Keypad Arrows (← and →) / Spacebar</span>
+            
+            <div className="flex gap-3 items-center font-sans">
+              <button
+                disabled={currentSlideIndex === 0}
+                onClick={() => setCurrentSlideIndex(currentSlideIndex - 1)}
+                className="bg-white/5 hover:bg-white/10 text-white disabled:opacity-20 px-4 py-2 rounded-xl border border-white/10 cursor-pointer text-xs font-bold"
+              >
+                Previous
+              </button>
+              <span className="text-xs font-bold font-mono px-2 text-slate-400">Slide {currentSlideIndex + 1} / {slides.length}</span>
+              <button
+                disabled={currentSlideIndex === slides.length - 1}
+                onClick={() => setCurrentSlideIndex(currentSlideIndex + 1)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-20 px-5 py-2 rounded-xl font-extrabold cursor-pointer transition-all active:scale-95 text-xs"
+              >
+                Next Slide
+              </button>
+            </div>
+          </footer>
+        </div>
+      )}
     </div>
   );
 }

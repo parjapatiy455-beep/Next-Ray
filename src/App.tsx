@@ -48,6 +48,40 @@ import SettingsPanel from './components/SettingsPanel';
 import InteractiveWorkbench from './components/InteractiveWorkbench';
 import { AVAILABLE_MODELS } from './lib/models';
 
+function extractDecksAndHtml(text: string) {
+  // Extract JSON presentation slide decks
+  const jsonRegex = /```json\s*([\s\S]*?)\s*```/g;
+  let match;
+  while ((match = jsonRegex.exec(text)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed && (parsed.type === 'slideshow_deck' || Array.isArray(parsed.slides))) {
+        return { type: 'slides', data: parsed };
+      }
+    } catch (e) {
+      // Ignored non-deck JSON block
+    }
+  }
+
+  // Backup simple search for raw JSON structures
+  try {
+    const rawMatch = text.match(/\{\s*"type"\s*:\s*"slideshow_deck"[\s\S]*\}/);
+    if (rawMatch) {
+      const parsed = JSON.parse(rawMatch[0]);
+      return { type: 'slides', data: parsed };
+    }
+  } catch(e){}
+
+  // Extract standard html blocks
+  const htmlRegex = /```html\s*([\s\S]*?)\s*```/g;
+  let htmlMatch;
+  while ((htmlMatch = htmlRegex.exec(text)) !== null) {
+    return { type: 'html', data: htmlMatch[1] };
+  }
+  
+  return null;
+}
+
 export default function App() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -75,9 +109,46 @@ export default function App() {
   // Sidebar settings
   const [config, setConfig] = useState<ChatConfig>({
     modelId: 'meta/llama-3.3-70b-instruct',
-    systemInstruction: 'You are Next Ray, an advanced AI companion designed to mimic ChatGPT\'s professional formatting. Always avoid presenting complex answers as a single custom paragraph. Instead, ALWAYS format your responses with structured paragraphs, bold emphasis on key items, clean bulleted or numbered action lists, and clear subheadings. Keep answers exceptionally organized, spacious, and highly visually engaging.',
+    systemInstruction: `You are Next Ray, an advanced AI companion designed to mimic ChatGPT's professional formatting, with access to an interactive Slide Creator and HTML Sandbox. Always avoid presenting complex answers as a single custom paragraph. Instead, ALWAYS format your responses with structured paragraphs, bold emphasis on key items, clean bulleted or numbered action lists, and clear subheadings. Keep answers exceptionally organized, spacious, and highly visually engaging.
+
+ADDITIONAL CORE ABILITY:
+You can build and edit professional slideshow presentations and interactive web apps!
+1. To build, edit, or update a PPT presentation deck for the user, ALWAYS write a markdown code block of type "json" containing this exact schema structure:
+\`\`\`json
+{
+  "type": "slideshow_deck",
+  "name": "Pitch Deck Title",
+  "slides": [
+    {
+      "id": "s1",
+      "title": "Slide Title Text",
+      "subtitle": "Slide Subtitle or Caption",
+      "bullets": ["Bullet line 1", "Bullet line 2"],
+      "layout": "title" // can be 'title', 'split', 'bento', 'quote', 'metrics'
+    }
+  ]
+}
+\`\`\`
+For layouts:
+- 'title': centered landing presentation banner.
+- 'split': dual columns for lists and bullet items (bullets list automatically renders on right side).
+- 'bento': comprehensive bento list presentation.
+- 'quote': large quotation presentation (uses 'title' field as quotation body, and 'quoteAuthor' for citation).
+- 'metrics': large scale statistics highlight (use 'metricValue' such as "99.8%" and 'metricLabel' such as "System Speedup Index").
+
+2. To generate a live, working HTML mock/sandbox code, ALWAYS output the complete working HTML document enclosed inside an \`\`\`html markdown block containing full CSS styles or using CDN Tailwind:
+\`\`\`html
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  ...
+</html>
+\`\`\`
+Feel free to introduce yourself as an interactive PPT & Sandbox mastermind!`,
     temperature: 0.7,
-    maxTokens: 2048,
+    maxTokens: 3000,
   });
 
   // Unique identifier generator
@@ -673,6 +744,19 @@ export default function App() {
           ...completeAssistantMsg,
           createdAt: new Date()
         });
+      }
+
+      // Automatically detect and load slideshow decks or HTML sandbox packages
+      const updateResult = extractDecksAndHtml(accumulatedText);
+      if (updateResult) {
+        setIsWorkbenchOpen(true);
+        setTimeout(() => {
+          if (updateResult.type === 'slides') {
+            window.dispatchEvent(new CustomEvent('update-slideshow-deck', { detail: updateResult.data }));
+          } else if (updateResult.type === 'html') {
+            window.dispatchEvent(new CustomEvent('update-html-sandbox', { detail: { code: updateResult.data } }));
+          }
+        }, 300);
       }
 
     } catch (err: any) {
