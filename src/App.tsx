@@ -62,7 +62,7 @@ export default function App() {
 
   // Sidebar settings
   const [config, setConfig] = useState<ChatConfig>({
-    modelId: 'nvidia/llama-3.1-nemotron-70b-instruct',
+    modelId: 'deepseek-ai/deepseek-r1',
     systemInstruction: 'You are Next Ray, an advanced and elegant AI companion with deep helpful logic structures. Match user parameters, provide clean documentation, code cleanly, and structure replies perfectly with markdown.',
     temperature: 0.7,
     maxTokens: 2048,
