@@ -43,7 +43,7 @@ export async function onRequestPost(context: any): Promise<Response> {
         "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: modelId || "deepseek-ai/deepseek-r1",
+        model: modelId || "meta/llama-3.3-70b-instruct",
         messages: cleanedMessages,
         temperature: typeof temperature === "number" ? temperature : 0.2,
         max_tokens: typeof maxTokens === "number" ? maxTokens : 1024,
@@ -52,7 +52,7 @@ export async function onRequestPost(context: any): Promise<Response> {
     });
 
     if (response.status === 404) {
-      console.warn(`[Next Ray Worker] Model ${modelId} returned 404. Falling back to deepseek-ai/deepseek-r1`);
+      console.warn(`[Next Ray Worker] Model ${modelId} returned 404. Falling back to meta/llama-3.3-70b-instruct`);
       response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -60,7 +60,7 @@ export async function onRequestPost(context: any): Promise<Response> {
           "Authorization": `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "deepseek-ai/deepseek-r1",
+          model: "meta/llama-3.3-70b-instruct",
           messages: cleanedMessages,
           temperature: typeof temperature === "number" ? temperature : 0.2,
           max_tokens: typeof maxTokens === "number" ? maxTokens : 1024,

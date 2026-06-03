@@ -5,6 +5,9 @@ import {
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
   User
 } from "firebase/auth";
 import { 
@@ -134,6 +137,27 @@ export async function signInWithGoogle(): Promise<User | null> {
     console.error("OAuth sign in popup error:", error);
     return null;
   }
+}
+
+// Email & Password Auth: Sign Up
+export async function signUpEmail(email: string, password: string, displayName: string): Promise<User> {
+  if (!_auth) {
+    throw new Error("Auth service is not initialized");
+  }
+  const credential = await createUserWithEmailAndPassword(_auth, email, password);
+  if (displayName) {
+    await updateProfile(credential.user, { displayName });
+  }
+  return credential.user;
+}
+
+// Email & Password Auth: Sign In
+export async function signInEmail(email: string, password: string): Promise<User> {
+  if (!_auth) {
+    throw new Error("Auth service is not initialized");
+  }
+  const credential = await signInWithEmailAndPassword(_auth, email, password);
+  return credential.user;
 }
 
 // Sign-out

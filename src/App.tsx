@@ -20,6 +20,8 @@ import {
   db, 
   isLocalFallback, 
   signInWithGoogle, 
+  signUpEmail,
+  signInEmail,
   logoutUser,
   handleFirestoreError,
   OperationType
@@ -55,6 +57,14 @@ export default function App() {
   const [isStreamLoading, setIsStreamLoading] = useState(false);
   const [serverKeyConfigured, setServerKeyConfigured] = useState(false);
   
+  // Email-Password Authentication Credentials States
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authDisplayName, setAuthDisplayName] = useState('');
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authErrorAlert, setAuthErrorAlert] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  
   // Custom API key entered by user in settings panel
   const [customNvidiaKey, setCustomNvidiaKey] = useState<string>(() => {
     return localStorage.getItem('nextray_custom_nvidia_key') || '';
@@ -62,8 +72,8 @@ export default function App() {
 
   // Sidebar settings
   const [config, setConfig] = useState<ChatConfig>({
-    modelId: 'deepseek-ai/deepseek-r1',
-    systemInstruction: 'You are Next Ray, an advanced and elegant AI companion with deep helpful logic structures. Match user parameters, provide clean documentation, code cleanly, and structure replies perfectly with markdown.',
+    modelId: 'meta/llama-3.3-70b-instruct',
+    systemInstruction: 'You are Next Ray, an advanced AI companion designed to mimic ChatGPT\'s professional formatting. Always avoid presenting complex answers as a single custom paragraph. Instead, ALWAYS format your responses with structured paragraphs, bold emphasis on key items, clean bulleted or numbered action lists, and clear subheadings. Keep answers exceptionally organized, spacious, and highly visually engaging.',
     temperature: 0.7,
     maxTokens: 2048,
   });
@@ -235,6 +245,70 @@ export default function App() {
         photoURL: loggedUser.photoURL || null,
       };
       setUser(profile);
+    }
+  };
+
+  // Handle Email & Password signup and login
+  const handleEmailAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthErrorAlert(null);
+    setAuthLoading(true);
+
+    if (!authEmail || !authPassword) {
+      setAuthErrorAlert("Please enter both email and password.");
+      setAuthLoading(false);
+      return;
+    }
+
+    if (authMode === 'signup' && !authDisplayName) {
+      setAuthErrorAlert("Please enter a display name for signup.");
+      setAuthLoading(false);
+      return;
+    }
+
+    if (authPassword.length < 6) {
+      setAuthErrorAlert("Password must be at least 6 characters long.");
+      setAuthLoading(false);
+      return;
+    }
+
+    try {
+      let loggedUser;
+      if (authMode === 'signup') {
+        loggedUser = await signUpEmail(authEmail, authPassword, authDisplayName);
+      } else {
+        loggedUser = await signInEmail(authEmail, authPassword);
+      }
+
+      if (loggedUser) {
+        const profile: UserProfile = {
+          uid: loggedUser.uid,
+          email: loggedUser.email || '',
+          displayName: loggedUser.displayName || authDisplayName || 'User Space',
+          photoURL: loggedUser.photoURL || null,
+        };
+        setUser(profile);
+        // Reset state variables
+        setAuthEmail('');
+        setAuthPassword('');
+        setAuthDisplayName('');
+        setAuthErrorAlert(null);
+      }
+    } catch (err: any) {
+      console.error("Authentication action failed:", err);
+      let message = err.message || "An unexpected credentials error occurred.";
+      if (message.includes("auth/invalid-credential") || message.includes("auth/user-not-found")) {
+        message = "Incorrect email address or password. Please verify and retry.";
+      } else if (message.includes("auth/email-already-in-use")) {
+        message = "This email is already in use. Attempt to log in instead.";
+      } else if (message.includes("auth/weak-password")) {
+        message = "Password criteria not met. Please use at least 6 characters.";
+      } else if (message.includes("auth/invalid-email")) {
+        message = "The entered email address layout is invalid.";
+      }
+      setAuthErrorAlert(message);
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -639,35 +713,148 @@ export default function App() {
             onQuickPrompt={(text) => handleSendMessage(text)}
           />
         ) : (
-          // Full-screen CTA Login overlay in light off-white slate style
-          <div className="flex-grow flex flex-col items-center justify-center p-6 bg-slate-50/30">
-            <div className="max-w-md w-full p-8 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-100 text-center space-y-6 animate-in zoom-in-95 duration-150">
-              <div className="mx-auto h-12 w-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm">
-                <Cpu className="h-6 w-6" />
-              </div>
-
-              <div className="space-y-2">
+          // Full-screen CTA Login and Signup Form
+          <div className="flex-grow flex flex-col items-center justify-center p-6 bg-slate-50/50">
+            <div className="max-w-md w-full p-8 bg-white border border-slate-205/80 rounded-2xl shadow-xl shadow-slate-100 space-y-6 animate-in zoom-in-95 duration-150">
+              
+              <div className="text-center space-y-2">
+                <div className="mx-auto h-11 w-11 rounded-xl bg-slate-900 flex items-center justify-center text-white shadow-xs">
+                  <Cpu className="h-5 w-5" />
+                </div>
                 <h2 className="text-xl font-bold text-slate-800 tracking-tight font-sans">
                   Next Ray Space
                 </h2>
-                <p className="text-sm text-slate-500 font-normal leading-relaxed">
-                  Sign in with your Google account to initialize conversation paths with live NVIDIA cloud compute models in the workspace.
+                <p className="text-xs text-slate-400 font-normal leading-relaxed">
+                  Authenticate your workspace account to access live Llama 3.3 and synchronised chat databases.
                 </p>
               </div>
 
-              <button
-                onClick={handleLogin}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-xs transition-colors shadow-xs active:scale-[0.98] cursor-pointer"
-              >
-                <LogIn className="h-4 w-4 text-indigo-400" />
-                <span>Authorize with Google Account</span>
-              </button>
-
-              <div className="pt-2">
+              {/* Login / Signup form switch */}
+              <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/50">
                 <button
                   type="button"
                   onClick={() => {
-                    // Start in local developer preview mode immediately
+                    setAuthMode('login');
+                    setAuthErrorAlert(null);
+                  }}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    authMode === 'login' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-550 hover:text-slate-800'
+                  }`}
+                >
+                  Log In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('signup');
+                    setAuthErrorAlert(null);
+                  }}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    authMode === 'signup' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-550 hover:text-slate-800'
+                  }`}
+                >
+                  Sign Up
+                </button>
+              </div>
+
+              {/* Error Alert Display */}
+              {authErrorAlert && (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-[11px] text-red-650 font-medium leading-relaxed">
+                  ⚠️ {authErrorAlert}
+                </div>
+              )}
+
+              {/* Core Email Authentication Form */}
+              <form onSubmit={handleEmailAuthSubmit} className="space-y-4 text-left">
+                {authMode === 'signup' && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Display Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. John Doe"
+                      value={authDisplayName}
+                      onChange={(e) => setAuthDisplayName(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-hidden focus:border-slate-800 bg-slate-50/50"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="you@domain.com"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-hidden focus:border-slate-800 bg-slate-50/50"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-hidden focus:border-slate-800 bg-slate-50/50"
+                  />
+                  {authMode === 'signup' && (
+                    <span className="text-[9px] text-slate-400 block mt-0.5">
+                      Must be at least 6 characters.
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full flex items-center justify-center py-2.5 px-4 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-405 text-white font-semibold rounded-lg text-xs transition-colors shadow-xs hover:shadow-md cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {authLoading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Authenticating credentials...
+                    </span>
+                  ) : authMode === 'login' ? (
+                    'Sign In to Workspace'
+                  ) : (
+                    'Create Workspace Account'
+                  )}
+                </button>
+              </form>
+
+              {/* Alternate Row Split Divider */}
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink mx-4 text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                  or
+                </span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
+
+              {/* Secondary Google Login Control Button */}
+              <button
+                onClick={handleLogin}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-705 font-semibold rounded-lg text-xs border border-slate-200 transition-colors shadow-xs cursor-pointer"
+              >
+                <LogIn className="h-4 w-4 text-indigo-500" />
+                <span>Sync instantly using Google</span>
+              </button>
+
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
                     const fakeUser = {
                       uid: "nextray-local-developer",
                       email: "guest@nextray.ai",
@@ -677,9 +864,9 @@ export default function App() {
                     localStorage.setItem("nextray_local_user", JSON.stringify(fakeUser));
                     setUser(fakeUser);
                   }}
-                  className="text-xs text-indigo-600 hover:text-indigo-700 font-bold underline transition-colors cursor-pointer"
+                  className="text-[11px] text-indigo-600 hover:text-indigo-700 font-bold underline transition-colors cursor-pointer"
                 >
-                  Enter sandbox developer workspace
+                  Enter sandbox developer preview mode
                 </button>
               </div>
             </div>

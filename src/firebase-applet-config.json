@@ -1,9 +1,11 @@
 {
-  "apiKey": "AIzaSy_FAKE_KEY_FOR_LOCAL_COMPILATION_ONLY",
-  "authDomain": "next-ray-placeholder.firebaseapp.com",
-  "projectId": "next-ray-placeholder",
-  "storageBucket": "next-ray-placeholder.appspot.com",
-  "messagingSenderId": "123456789012",
-  "appId": "1:123456789012:web:abcdef1234567890",
+  "apiKey": "AIzaSyA5h7x6rUC1PsOHU_ttlvenO6MKSbmKu0A",
+  "authDomain": "luno-73d66.firebaseapp.com",
+  "databaseURL": "https://luno-73d66-default-rtdb.asia-southeast1.firebasedatabase.app",
+  "projectId": "luno-73d66",
+  "storageBucket": "luno-73d66.firebasestorage.app",
+  "messagingSenderId": "661391070965",
+  "appId": "1:661391070965:web:738cb8d65f219fffddd7bc",
+  "measurementId": "G-Q7FVMDH2YV",
   "firestoreDatabaseId": "(default)"
 }

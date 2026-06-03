@@ -231,28 +231,50 @@ export default function ChatArea({
   // Initial greeting box items
   const starterBento = [
     {
-      title: "Clean Code Generator",
-      prompt: "Can you write a responsive bento-grid card React component utilizing Tailwind classes?",
-      desc: "Creates elegant production components",
-      color: "bg-cyan-50 text-cyan-700 hover:bg-cyan-100/60"
+      title: "Create an image",
+      prompt: "Can you describe a highly detailed prompt to generate an image of a futuristic floating cloud island?",
+      desc: "Get creative visuals or illustration descriptions",
+      icon: (
+        <svg className="h-5 w-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <polyline points="21 15 16 10 5 21" />
+        </svg>
+      )
     },
     {
-      title: "Data Summary Parsing",
-      prompt: "Convert this CSV dataset into a neat markdown statistical table showing products, revenue, and margins.",
-      desc: "Format databases into markdown tables",
-      color: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100/60"
+      title: "Write or edit",
+      prompt: "Critique and rewrite this text to sound more business-ready, elegant, and standard-aligned.",
+      desc: "Draft essays, code documentation, or emails",
+      icon: (
+        <svg className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z" />
+        </svg>
+      )
     },
     {
-      title: "Explain Complex Physics",
-      prompt: "Can you explain Quantum Entanglement conceptually using a friendly real-life analogy?",
-      desc: "Breaks advanced topics down simply",
-      color: "bg-indigo-50 text-indigo-700 hover:bg-indigo-100/60"
+      title: "Look something up",
+      prompt: "Explain the logical differences between relational databases and Firestore collections in high simplicity.",
+      desc: "Get fast explanations for code, concepts, or terms",
+      icon: (
+        <svg className="h-5 w-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+      )
     },
     {
-      title: "Refinement & Polishing",
-      prompt: "Critique and polish this text structure to sound highly formal, business-ready, and engaging.",
-      desc: "Rewrites logs and text to stand out",
-      color: "bg-purple-50 text-purple-700 hover:bg-purple-100/60"
+      title: "Analyze data",
+      prompt: "Format my user chat logs into a neat markdown summary report with categorized tables.",
+      desc: "Upload logs, code files, or data to parse",
+      icon: (
+        <svg className="h-5 w-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+      )
     }
   ];
 
@@ -304,16 +326,13 @@ export default function ChatArea({
       >
         {messages.length === 0 ? (
           // Clean Minimal Welcome Screen
-          <div className="max-w-2xl mx-auto py-12 md:py-20 space-y-10 select-none">
-            <div className="text-center space-y-4">
-              <div className="inline-flex h-12 w-12 rounded-xl bg-indigo-600 items-center justify-center text-white shadow-sm mb-2">
-                <Sparkles className="h-6 w-6" />
-              </div>
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-800 font-sans">
-                Next Ray
+          <div className="max-w-2xl mx-auto py-16 md:py-24 space-y-12 select-none">
+            <div className="text-center space-y-3">
+              <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-800 font-sans">
+                What are you working on?
               </h2>
-              <p className="text-slate-450 max-w-md mx-auto text-sm leading-relaxed">
-                Connect to live NVIDIA NIM cloud compute nodes in a polished, minimalist workspace.
+              <p className="text-slate-400 max-w-md mx-auto text-sm font-normal">
+                Ask Next Ray anything. Your chats are synchronized with the real database.
               </p>
             </div>
 
@@ -323,22 +342,26 @@ export default function ChatArea({
                 <button
                   key={idx}
                   onClick={() => onQuickPrompt(item.prompt)}
-                  className="p-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-left transition-all text-slate-700 hover:text-slate-900 shadow-xs relative group overflow-hidden"
+                  className="p-4 rounded-2xl border border-slate-200/80 bg-white hover:bg-slate-50 text-left transition-all text-slate-705 shadow-sm relative group cursor-pointer active:scale-[0.99] flex items-start gap-3.5"
                 >
-                  <h3 className="text-sm font-bold tracking-tight text-slate-800 mb-1 flex items-center justify-between">
-                    {item.title}
-                    <span className="text-xs opacity-0 group-hover:opacity-100 transition-opacity text-slate-400">➔</span>
-                  </h3>
-                  <p className="text-xs leading-relaxed text-slate-500">
-                    {item.desc}
-                  </p>
+                  <div className="p-2 bg-slate-50 group-hover:bg-white rounded-xl border border-slate-100 transition-colors">
+                    {item.icon}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold tracking-tight text-slate-800 mb-1 flex items-center justify-between">
+                      {item.title}
+                    </h3>
+                    <p className="text-xs leading-relaxed text-slate-450">
+                      {item.desc}
+                    </p>
+                  </div>
                 </button>
               ))}
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
-              <Paperclip className="h-3.5 w-3.5 text-slate-400" />
-              <span>Drag-and-drop code, CSV, or image files anywhere to attach and analyze.</span>
+            <div className="p-4 rounded-xl bg-slate-50/50 border border-slate-150 text-center text-[11px] text-slate-400 flex items-center justify-center gap-2">
+              <Paperclip className="h-4 w-4 text-slate-400" />
+              <span>Drag & drop code, datasets, or images directly to analyze with Llama 3.3.</span>
             </div>
           </div>
         ) : (
@@ -353,21 +376,25 @@ export default function ChatArea({
               return (
                 <div 
                   key={msg.messageId || index}
-                  className={`flex gap-4 ${isAssistant ? '' : 'justify-end'}`}
+                  className={`flex gap-4 w-full ${isAssistant ? 'items-start py-4' : 'justify-end py-2'}`}
                   id={`msg-${msg.messageId}`}
                 >
                   {/* Left Avatar Column */}
                   {isAssistant && (
-                    <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-indigo-600 shadow-xs select-none flex-shrink-0 animate-in fade-in">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                    <div className="h-8 w-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs select-none flex-shrink-0 animate-in fade-in">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        <path d="M2 12h20" />
+                      </svg>
                     </div>
                   )}
 
                   {/* Message Bubble Container */}
-                  <div className={`max-w-[80%] rounded-2xl px-5 py-3.5 space-y-3 transition-all animate-in fade-in duration-200 ${
+                  <div className={`transition-all animate-in fade-in duration-200 ${
                     isAssistant 
-                      ? 'bg-slate-50/70 border border-slate-100 text-slate-800' 
-                      : 'bg-indigo-600 text-white shadow-xs'
+                      ? 'flex-1 space-y-3' 
+                      : 'max-w-[70%] rounded-2xl px-4 py-2.5 bg-slate-100 text-slate-800 border border-slate-200/40 shadow-xs'
                   }`}>
                     
                     {/* Attached file visual preview inside dialogue bubble */}
@@ -404,13 +431,13 @@ export default function ChatArea({
                     )}
 
                     {/* Rendering of GPT core content markdown */}
-                    <div className={`markdown-body prose max-w-none leading-relaxed font-sans text-sm break-words ${isAssistant ? 'text-slate-800' : 'text-white'}`}>
+                    <div className={`markdown-body prose max-w-none leading-relaxed font-sans text-sm break-words text-slate-800`}>
                       {isAssistant ? (
                         <div className="prose prose-slate prose-sm text-slate-700 font-sans leading-relaxed">
                           <Markdown>{msg.content}</Markdown>
                         </div>
                       ) : (
-                        <p className="text-white whitespace-pre-wrap leading-relaxed select-text font-normal text-sm">
+                        <p className="whitespace-pre-wrap leading-relaxed select-text font-normal text-sm">
                           {msg.content}
                         </p>
                       )}

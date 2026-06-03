@@ -2,6 +2,15 @@ import { AIModel } from "../types";
 
 export const AVAILABLE_MODELS: AIModel[] = [
   {
+    id: "meta/llama-3.3-70b-instruct",
+    name: "Llama 3.3 70B",
+    provider: "NVIDIA",
+    description: "Meta's state-of-the-art 70B model hosted on NVIDIA NIM. Exceptional multilingual performance, structured explanations, coding mastery, and swift speeds.",
+    badge: "Flagship 3.3",
+    maxTokens: 4096,
+    isVision: false,
+  },
+  {
     id: "deepseek-ai/deepseek-r1",
     name: "DeepSeek R1",
     provider: "NVIDIA",
@@ -34,15 +43,6 @@ export const AVAILABLE_MODELS: AIModel[] = [
     provider: "NVIDIA",
     description: "Alibaba's advanced 72B general-purpose model. Features stellar multilingual understanding, rich structural responses, high command-following precision, and robust memory.",
     badge: "Advanced Generalist",
-    maxTokens: 4096,
-    isVision: false,
-  },
-  {
-    id: "meta/llama-3.3-70b-instruct",
-    name: "Llama 3.3 70B",
-    provider: "NVIDIA",
-    description: "Meta's state-of-the-art 70B model hosted on NVIDIA NIM. Exceptional multilingual performance, structured explanations, coding mastery, and swift speeds.",
-    badge: "Flagship 3.3",
     maxTokens: 4096,
     isVision: false,
   },

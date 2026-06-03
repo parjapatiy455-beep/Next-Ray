@@ -78,7 +78,7 @@ app.post("/api/chat/nvidia", async (req, res) => {
     let stream;
     try {
       stream = await openai.chat.completions.create({
-        model: modelId || "deepseek-ai/deepseek-r1",
+        model: modelId || "meta/llama-3.3-70b-instruct",
         messages: cleanedMessages,
         temperature: typeof temperature === "number" ? temperature : 0.2,
         max_tokens: typeof maxTokens === "number" ? maxTokens : 1024,
@@ -86,9 +86,9 @@ app.post("/api/chat/nvidia", async (req, res) => {
       });
     } catch (err: any) {
       if (err.status === 404 || err.message?.includes("404")) {
-        console.warn(`[Next Ray] Model ${modelId} returned 404. Falling back to deepseek-ai/deepseek-r1`);
+        console.warn(`[Next Ray] Model ${modelId} returned 404. Falling back to meta/llama-3.3-70b-instruct`);
         stream = await openai.chat.completions.create({
-          model: "deepseek-ai/deepseek-r1",
+          model: "meta/llama-3.3-70b-instruct",
           messages: cleanedMessages,
           temperature: typeof temperature === "number" ? temperature : 0.2,
           max_tokens: typeof maxTokens === "number" ? maxTokens : 1024,
