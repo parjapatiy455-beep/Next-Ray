@@ -34,6 +34,291 @@ interface ChatAreaProps {
   onQuickPrompt: (text: string) => void;
 }
 
+// --- Memoized Message Item Component ---
+// This prevents historic messages (and their heavy markdown parsed outputs) from re-rendering
+// on every single key press when the user typing takes place!
+const MessageItem = React.memo(function MessageItem({
+  msg,
+  currentModelId,
+  isSpeakingId,
+  copiedMessageId,
+  onCopyText,
+  onSpeakText,
+  formatBytes,
+}: {
+  msg: ChatMessage;
+  currentModelId: string;
+  isSpeakingId: string | null;
+  copiedMessageId: string | null;
+  onCopyText: (text: string, id: string) => void;
+  onSpeakText: (text: string, id: string) => void;
+  formatBytes: (bytes: number) => string;
+}) {
+  const isAssistant = msg.role === 'assistant';
+  const isSystem = msg.role === 'system';
+  
+  if (isSystem) return null; // Suppress display of raw system triggers
+
+  return (
+    <div 
+      className={`flex gap-4 w-full ${isAssistant ? 'items-start py-4' : 'justify-end py-2'}`}
+      id={`msg-${msg.messageId}`}
+    >
+      {/* Left Avatar Column */}
+      {isAssistant && (
+        <div className="h-8 w-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs select-none flex-shrink-0 animate-in fade-in">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            <path d="M2 12h20" />
+          </svg>
+        </div>
+      )}
+
+      {/* Message Bubble Container */}
+      <div className={`transition-all animate-in fade-in duration-200 ${
+        isAssistant 
+          ? 'flex-1 space-y-3' 
+          : 'max-w-[70%] rounded-2xl px-4 py-2.5 bg-slate-100 text-slate-800 border border-slate-200/40 shadow-xs'
+      }`}>
+        
+        {/* Attached file visual preview inside dialogue bubble */}
+        {msg.fileName && (
+          <div className={`p-2.5 rounded-lg border flex items-center gap-2.5 mb-2 ${
+            isAssistant 
+              ? 'bg-white border-slate-100 text-slate-700' 
+              : 'bg-indigo-700/60 border-indigo-700/80 text-white'
+          }`}>
+            {msg.fileType?.startsWith('image/') ? (
+              <div className="relative h-12 w-12 rounded overflow-hidden border border-slate-200 bg-slate-50 flex-shrink-0 flex items-center justify-center">
+                <img 
+                  src={msg.fileData || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100"} 
+                  alt={msg.fileName} 
+                  className="h-full w-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            ) : (
+              <div className="h-9 w-9 rounded bg-indigo-900/10 flex items-center justify-center text-xs flex-shrink-0">
+                {msg.fileName.endsWith('.csv') ? (
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
+                ) : (
+                  <FileText className="h-4 w-4 text-indigo-300" />
+                )}
+              </div>
+            )}
+            <div className="flex-1 min-w-0 text-xs text-left">
+              <p className="font-semibold truncate tracking-tight">{msg.fileName}</p>
+              <p className="opacity-70 font-mono text-[9px]">{msg.fileSize ? formatBytes(msg.fileSize) : 'Extracted context'}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Rendering of GPT core content markdown */}
+        <div className={`markdown-body prose max-w-none leading-relaxed font-sans text-sm break-words text-slate-800`}>
+          {isAssistant ? (
+            <div className="prose prose-slate prose-sm text-slate-700 font-sans leading-relaxed">
+              <Markdown>{msg.content}</Markdown>
+            </div>
+          ) : (
+            <p className="whitespace-pre-wrap leading-relaxed select-text font-normal text-sm">
+              {msg.content}
+            </p>
+          )}
+        </div>
+
+        {/* Assistant Metadata / Audio Utilities Row */}
+        {isAssistant && (
+          <div className="flex items-center gap-3 pt-2 border-t border-slate-100 mt-2 text-xs text-slate-400 font-mono">
+            <span className="text-[10px]">Model: <strong className="text-slate-500 font-sans uppercase text-[9px]">{currentModelId.split('/').pop()}</strong></span>
+            <div className="h-3 w-px bg-slate-200" />
+            
+            <button
+              onClick={() => onCopyText(msg.content, msg.messageId)}
+              className="hover:text-indigo-600 flex items-center gap-1 transition-colors"
+              title="Copy text block"
+            >
+              {copiedMessageId === msg.messageId ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                  <span className="text-emerald-500 font-bold">Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={() => onSpeakText(msg.content, msg.messageId)}
+              className="hover:text-indigo-600 flex items-center gap-1 transition-colors"
+              title="Listen to Speech"
+            >
+              <Volume2 className={`h-3.5 w-3.5 ${isSpeakingId === msg.messageId ? 'text-indigo-500 animate-pulse font-bold' : ''}`} />
+              <span className={isSpeakingId === msg.messageId ? 'text-indigo-500 font-bold' : ''}>
+                {isSpeakingId === msg.messageId ? 'Speaking' : 'Speak'}
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  // Only re-render a message if critical props actually change
+  return (
+    prevProps.msg.messageId === nextProps.msg.messageId &&
+    prevProps.msg.content === nextProps.msg.content &&
+    prevProps.isSpeakingId === nextProps.isSpeakingId &&
+    prevProps.copiedMessageId === nextProps.copiedMessageId &&
+    prevProps.currentModelId === nextProps.currentModelId
+  );
+});
+
+
+// --- Localized Input Message Builder ---
+// Keeping input text local protects typing performance by not triggering broad parent re-renders!
+interface ChatInputFormProps {
+  onSendMessage: (content: string, fileDataUrl?: string, fileType?: string, fileName?: string, fileSize?: number) => void;
+  isStreamLoading: boolean;
+  attachedFile: any;
+  setAttachedFile: React.Dispatch<React.SetStateAction<any>>;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  formatBytes: (bytes: number) => string;
+}
+
+function ChatInputForm({
+  onSendMessage,
+  isStreamLoading,
+  attachedFile,
+  setAttachedFile,
+  fileInputRef,
+  handleFileChange,
+  formatBytes,
+}: ChatInputFormProps) {
+  const [inputText, setInputText] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputText.trim() && !attachedFile) return;
+
+    let finalPrompt = inputText;
+    
+    // Check text context extraction
+    if (attachedFile && attachedFile.isTextExtract && attachedFile.extractedText) {
+      finalPrompt = `${inputText}\n\n---\n**CONTEXT FILE ATTACHED**\nFilename: ${attachedFile.name}\nContent:\n\`\`\`\n${attachedFile.extractedText}\n\`\`\``;
+    }
+
+    onSendMessage(
+      finalPrompt, 
+      attachedFile?.dataUrl || undefined, 
+      attachedFile?.type || undefined, 
+      attachedFile?.name || undefined, 
+      attachedFile?.size || undefined
+    );
+    
+    setInputText('');
+    setAttachedFile(null);
+  };
+
+  return (
+    <footer className="p-6 md:p-8 border-t border-slate-100 bg-white whitespace-nowrap">
+      <div className="max-w-3xl mx-auto space-y-3">
+        
+        {/* Active upload preview handle */}
+        {attachedFile && (
+          <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/80 flex items-center justify-between text-xs text-slate-800 shadow-xs animate-in slide-in-from-bottom-2 duration-150">
+            <div className="flex items-center gap-2">
+              {attachedFile.type.startsWith('image/') ? (
+                <img 
+                  src={attachedFile.dataUrl} 
+                  alt="upload preview" 
+                  className="h-8 w-8 object-cover rounded border border-slate-250 bg-white"
+                />
+              ) : (
+                <div className="h-8 w-8 rounded bg-slate-100/80 flex items-center justify-center text-xs text-indigo-600 flex-shrink-0 font-bold border border-slate-200">
+                  TXT
+                </div>
+              )}
+              <div className="text-left">
+                <p className="font-semibold text-slate-800 max-w-[200px] truncate">{attachedFile.name}</p>
+                <p className="text-[10px] text-slate-400 font-mono">
+                  {formatBytes(attachedFile.size)} ({attachedFile.isTextExtract ? 'Extracted text injection' : 'Data Payload'})
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setAttachedFile(null)}
+              className="p-1 px-1.5 hover:bg-slate-200 text-slate-400 hover:text-slate-650 rounded-lg transition-all"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Clean Minimalism Absolute Custom Search Input Design template */}
+        <div className="relative group w-full">
+          <form onSubmit={handleSubmit} className="relative flex items-center w-full">
+            {/* Left attachment clip button absolute inside input */}
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 rounded-md transition-colors"
+                title="Attach File (Images/Code/CSV)"
+              >
+                <Paperclip className="h-4 w-4" />
+              </button>
+            </div>
+
+            <input 
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/*,text/*,.csv,.json,.ts,.js,.md,.py"
+              className="hidden"
+            />
+
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder={
+                attachedFile 
+                  ? "Explain what to analyze in this attachment..." 
+                  : "Ask Next Ray anything..."
+              }
+              disabled={isStreamLoading}
+              className="w-full pl-14 pr-16 py-4 bg-white border-2 border-slate-100 rounded-2xl text-sm focus:outline-none focus:border-indigo-200 transition-all shadow-lg shadow-slate-100 text-slate-800"
+            />
+
+            {/* Right submit absolute button inside input */}
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <button
+                type="submit"
+                disabled={isStreamLoading || (!inputText.trim() && !attachedFile)}
+                className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-slate-800 disabled:opacity-40 disabled:bg-slate-200 disabled:text-slate-400 transition-colors shadow-md flex items-center justify-center cursor-pointer"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <p className="text-center text-[10px] text-slate-400 mt-4 leading-none font-sans">
+          Next Ray utilizes official cloud backends. Results can vary by node. Model status: <span className="text-green-500 font-bold">ONLINE</span>
+        </p>
+      </div>
+    </footer>
+  );
+}
+
+
 export default function ChatArea({
   messages,
   currentModelId,
@@ -45,7 +330,6 @@ export default function ChatArea({
   serverKeyConfigured,
   onQuickPrompt
 }: ChatAreaProps) {
-  const [inputText, setInputText] = useState('');
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [isSpeakingId, setIsSpeakingId] = useState<string | null>(null);
   
@@ -54,7 +338,7 @@ export default function ChatArea({
     name: string;
     size: number;
     type: string;
-    dataUrl: string; // Base64 content representation
+    dataUrl: string; // Base64 representation
     isTextExtract: boolean;
     extractedText?: string;
   } | null>(null);
@@ -64,10 +348,24 @@ export default function ChatArea({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to lowest message
+  // Auto-scroll to lowest message with smart bottom tracking
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (!el) return;
+
+    // Check if the user is already scrolled near the bottom (within 200 pixels)
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
+
+    // Trigger smooth tracking if near the bottom, or if it is the start of a user message
+    const isAssistantStreaming = isStreamLoading && messages.length > 0 && messages[messages.length - 1].role === 'assistant';
+
+    if (isAtBottom || !isAssistantStreaming) {
+      requestAnimationFrame(() => {
+        el.scrollTo({
+          top: el.scrollHeight,
+          behavior: 'smooth'
+        });
+      });
     }
   }, [messages, isStreamLoading]);
 
@@ -169,30 +467,6 @@ export default function ChatArea({
     }
   };
 
-  // Submit trigger
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim() && !attachedFile) return;
-
-    let finalPrompt = inputText;
-    
-    // If text file was attached and needs contextual extraction
-    if (attachedFile && attachedFile.isTextExtract && attachedFile.extractedText) {
-      finalPrompt = `${inputText}\n\n---\n**CONTEXT FILE ATTACHED**\nFilename: ${attachedFile.name}\nContent:\n\`\`\`\n${attachedFile.extractedText}\n\`\`\``;
-    }
-
-    onSendMessage(
-      finalPrompt, 
-      attachedFile?.dataUrl || undefined, 
-      attachedFile?.type || undefined, 
-      attachedFile?.name || undefined, 
-      attachedFile?.size || undefined
-    );
-    
-    setInputText('');
-    setAttachedFile(null);
-  };
-
   // Copy Message text helper
   const handleCopyText = (text: string, msgId: string) => {
     navigator.clipboard.writeText(text);
@@ -214,7 +488,7 @@ export default function ChatArea({
     const cleanSpeech = text
       .replace(/```[\s\S]*?```/g, '[code block omitted]')
       .replace(/[*#_~`-]/g, '')
-      .slice(0, 1000); // safety length cap
+      .slice(0, 1000); // cap size
 
     const utterance = new SpeechSynthesisUtterance(cleanSpeech);
     utterance.onend = () => {
@@ -322,7 +596,7 @@ export default function ChatArea({
       {/* Main Conversation Feed Area */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-8 md:px-8 space-y-6 scrollbar-thin scrollbar-thumb-slate-200"
+        className="flex-1 overflow-y-auto px-4 py-8 md:px-8 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 animate-in fade-in duration-300"
       >
         {messages.length === 0 ? (
           // Clean Minimal Welcome Screen
@@ -367,122 +641,18 @@ export default function ChatArea({
         ) : (
           // Message Thread Feed
           <div className="max-w-3xl mx-auto space-y-6">
-            {messages.map((msg, index) => {
-              const isAssistant = msg.role === 'assistant';
-              const isSystem = msg.role === 'system';
-              
-              if (isSystem) return null; // Suppress display of raw system triggers
-
-              return (
-                <div 
-                  key={msg.messageId || index}
-                  className={`flex gap-4 w-full ${isAssistant ? 'items-start py-4' : 'justify-end py-2'}`}
-                  id={`msg-${msg.messageId}`}
-                >
-                  {/* Left Avatar Column */}
-                  {isAssistant && (
-                    <div className="h-8 w-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs select-none flex-shrink-0 animate-in fade-in">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                        <path d="M2 12h20" />
-                      </svg>
-                    </div>
-                  )}
-
-                  {/* Message Bubble Container */}
-                  <div className={`transition-all animate-in fade-in duration-200 ${
-                    isAssistant 
-                      ? 'flex-1 space-y-3' 
-                      : 'max-w-[70%] rounded-2xl px-4 py-2.5 bg-slate-100 text-slate-800 border border-slate-200/40 shadow-xs'
-                  }`}>
-                    
-                    {/* Attached file visual preview inside dialogue bubble */}
-                    {msg.fileName && (
-                      <div className={`p-2.5 rounded-lg border flex items-center gap-2.5 mb-2 ${
-                        isAssistant 
-                          ? 'bg-white border-slate-100 text-slate-700' 
-                          : 'bg-indigo-700/60 border-indigo-700/80 text-white'
-                      }`}>
-                        {msg.fileType?.startsWith('image/') ? (
-                          <div className="relative h-12 w-12 rounded overflow-hidden border border-slate-200 bg-slate-50 flex-shrink-0 flex items-center justify-center">
-                            {/* Visual reference for image payload */}
-                            <img 
-                              src={msg.fileData || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100"} 
-                              alt={msg.fileName} 
-                              className="h-full w-full object-cover"
-                              referrerPolicy="no-referrer"
-                            />
-                          </div>
-                        ) : (
-                          <div className="h-9 w-9 rounded bg-indigo-900/10 flex items-center justify-center text-xs flex-shrink-0">
-                            {msg.fileName.endsWith('.csv') ? (
-                              <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
-                            ) : (
-                              <FileText className="h-4 w-4 text-indigo-300" />
-                            )}
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0 text-xs text-left">
-                          <p className="font-semibold truncate tracking-tight">{msg.fileName}</p>
-                          <p className="opacity-70 font-mono text-[9px]">{msg.fileSize ? formatBytes(msg.fileSize) : 'Extracted context'}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Rendering of GPT core content markdown */}
-                    <div className={`markdown-body prose max-w-none leading-relaxed font-sans text-sm break-words text-slate-800`}>
-                      {isAssistant ? (
-                        <div className="prose prose-slate prose-sm text-slate-700 font-sans leading-relaxed">
-                          <Markdown>{msg.content}</Markdown>
-                        </div>
-                      ) : (
-                        <p className="whitespace-pre-wrap leading-relaxed select-text font-normal text-sm">
-                          {msg.content}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Assistant Metadata / Audio Utilities Row */}
-                    {isAssistant && (
-                      <div className="flex items-center gap-3 pt-2 border-t border-slate-100 mt-2 text-xs text-slate-400 font-mono">
-                        <span className="text-[10px]">Model: <strong className="text-slate-500 font-sans uppercase text-[9px]">{currentModelId.split('/').pop()}</strong></span>
-                        <div className="h-3 w-px bg-slate-200" />
-                        
-                        <button
-                          onClick={() => handleCopyText(msg.content, msg.messageId)}
-                          className="hover:text-indigo-600 flex items-center gap-1 transition-colors"
-                          title="Copy text block"
-                        >
-                          {copiedMessageId === msg.messageId ? (
-                            <>
-                              <Check className="h-3.5 w-3.5 text-emerald-500" />
-                              <span className="text-emerald-500 font-bold">Copied</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="h-3.5 w-3.5" />
-                              <span>Copy</span>
-                            </>
-                          )}
-                        </button>
-
-                        <button
-                          onClick={() => handleSpeakText(msg.content, msg.messageId)}
-                          className="hover:text-indigo-600 flex items-center gap-1 transition-colors"
-                          title="Listen to Speech"
-                        >
-                          <Volume2 className={`h-3.5 w-3.5 ${isSpeakingId === msg.messageId ? 'text-indigo-500 animate-pulse font-bold' : ''}`} />
-                          <span className={isSpeakingId === msg.messageId ? 'text-indigo-500 font-bold' : ''}>
-                            {isSpeakingId === msg.messageId ? 'Speaking' : 'Speak'}
-                          </span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {messages.map((msg, index) => (
+              <MessageItem
+                key={msg.messageId || index}
+                msg={msg}
+                currentModelId={currentModelId}
+                isSpeakingId={isSpeakingId}
+                copiedMessageId={copiedMessageId}
+                onCopyText={handleCopyText}
+                onSpeakText={handleSpeakText}
+                formatBytes={formatBytes}
+              />
+            ))}
 
             {/* SSE Stream loader bubble */}
             {isStreamLoading && (
@@ -522,97 +692,16 @@ export default function ChatArea({
         </div>
       )}
 
-      {/* Input Message Builder Section */}
-      <footer className="p-6 md:p-8 border-t border-slate-100 bg-white whitespace-nowrap">
-        <div className="max-w-3xl mx-auto space-y-3">
-          
-          {/* Active upload preview handle */}
-          {attachedFile && (
-            <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/80 flex items-center justify-between text-xs text-slate-800 shadow-xs animate-in slide-in-from-bottom-2 duration-150">
-              <div className="flex items-center gap-2">
-                {attachedFile.type.startsWith('image/') ? (
-                  <img 
-                    src={attachedFile.dataUrl} 
-                    alt="upload preview" 
-                    className="h-8 w-8 object-cover rounded border border-slate-250 bg-white"
-                  />
-                ) : (
-                  <div className="h-8 w-8 rounded bg-slate-100/80 flex items-center justify-center text-xs text-indigo-600 flex-shrink-0 font-bold border border-slate-200">
-                    TXT
-                  </div>
-                )}
-                <div className="text-left">
-                  <p className="font-semibold text-slate-800 max-w-[200px] truncate">{attachedFile.name}</p>
-                  <p className="text-[10px] text-slate-400 font-mono">
-                    {formatBytes(attachedFile.size)} ({attachedFile.isTextExtract ? 'Extracted text injection' : 'Data Payload'})
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setAttachedFile(null)}
-                className="p-1 px-1.5 hover:bg-slate-200 text-slate-400 hover:text-slate-650 rounded-lg transition-all"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-
-          {/* Clean Minimalism Absolute Custom Search Input Design template */}
-          <div className="relative group w-full">
-            <form onSubmit={handleSubmit} className="relative flex items-center w-full">
-              {/* Left attachment clip button absolute inside input */}
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 rounded-md transition-colors"
-                  title="Attach File (Images/Code/CSV)"
-                >
-                  <Paperclip className="h-4 w-4" />
-                </button>
-              </div>
-
-              <input 
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept="image/*,text/*,.csv,.json,.ts,.js,.md,.py"
-                className="hidden"
-              />
-
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder={
-                  attachedFile 
-                    ? "Explain what to analyze in this attachment..." 
-                    : "Ask Next Ray anything..."
-                }
-                disabled={isStreamLoading}
-                className="w-full pl-14 pr-16 py-4 bg-white border-2 border-slate-100 rounded-2xl text-sm focus:outline-none focus:border-indigo-200 transition-all shadow-lg shadow-slate-100 text-slate-800"
-              />
-
-              {/* Right submit absolute button inside input */}
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                <button
-                  type="submit"
-                  disabled={isStreamLoading || (!inputText.trim() && !attachedFile)}
-                  className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-slate-800 disabled:opacity-40 disabled:bg-slate-200 disabled:text-slate-400 transition-colors shadow-md flex items-center justify-center cursor-pointer"
-                >
-                  <Send className="h-4 w-4" />
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <p className="text-center text-[10px] text-slate-400 mt-4 leading-none font-sans">
-            Next Ray utilizes official cloud backends. Results can vary by node. Model status: <span className="text-green-500 font-bold">ONLINE</span>
-          </p>
-        </div>
-      </footer>
+      {/* Localized ChatInputForm handles state updates individually for zero typing stutters! */}
+      <ChatInputForm 
+        onSendMessage={onSendMessage}
+        isStreamLoading={isStreamLoading}
+        attachedFile={attachedFile}
+        setAttachedFile={setAttachedFile}
+        fileInputRef={fileInputRef}
+        handleFileChange={handleFileChange}
+        formatBytes={formatBytes}
+      />
     </div>
   );
 }

@@ -158,18 +158,21 @@ export default function App() {
       const localSessionsRaw = localStorage.getItem(`nextray_sessions_${user.uid}`);
       const loaded: ChatSession[] = localSessionsRaw ? JSON.parse(localSessionsRaw) : [];
       // Sort descending by updatedAt
-      loaded.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      loaded.sort((a, b) => {
+        const d1 = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const d2 = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        return d2 - d1;
+      });
       setSessions(loaded);
       if (loaded.length > 0 && !currentSessionId) {
         setCurrentSessionId(loaded[0].chatId);
       }
     } else {
-      // Firestore Live Query
+      // Firestore Live Query without orderBy to completely bypass the need for composite indexes!
       const path = 'chats';
       const chatsQuery = query(
         collection(db, "chats"),
-        where("userId", "==", user.uid),
-        orderBy("updatedAt", "desc")
+        where("userId", "==", user.uid)
       );
 
       const unsubscribe = onSnapshot(chatsQuery, (snapshot) => {
@@ -177,6 +180,20 @@ export default function App() {
         snapshot.forEach((doc) => {
           loaded.push(doc.data() as ChatSession);
         });
+
+        // Helper to safely parse dates that could be ISO string, JS Date, or Firestore Timestamp
+        const parseDate = (val: any) => {
+          if (!val) return 0;
+          if (typeof val === 'string') return new Date(val).getTime();
+          if (val instanceof Date) return val.getTime();
+          if (typeof val.toDate === 'function') return val.toDate().getTime();
+          if (typeof val.seconds === 'number') return val.seconds * 1000;
+          return new Date(val).getTime();
+        };
+
+        // Sort descending by updatedAt in memory
+        loaded.sort((a, b) => parseDate(b.updatedAt) - parseDate(a.updatedAt));
+
         setSessions(loaded);
         if (loaded.length > 0 && !currentSessionId) {
           setCurrentSessionId(loaded[0].chatId);
@@ -210,14 +227,17 @@ export default function App() {
       // LocalStorage Messages Loading
       const localMsgsRaw = localStorage.getItem(`nextray_msgs_${currentSessionId}`);
       const loaded: ChatMessage[] = localMsgsRaw ? JSON.parse(localMsgsRaw) : [];
-      loaded.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      loaded.sort((a, b) => {
+        const d1 = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const d2 = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return d1 - d2;
+      });
       setMessages(loaded);
     } else {
-      // Firestore Real-Time Query of subcollection messages
+      // Firestore Real-Time Query of subcollection messages - Safe in-memory sorting
       const path = `chats/${currentSessionId}/messages`;
       const messagesQuery = query(
-        collection(db, "chats", currentSessionId, "messages"),
-        orderBy("createdAt", "asc")
+        collection(db, "chats", currentSessionId, "messages")
       );
 
       const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
@@ -225,6 +245,20 @@ export default function App() {
         snapshot.forEach((doc) => {
           loaded.push(doc.data() as ChatMessage);
         });
+
+        // Helper to safely parse dates that could be ISO string, JS Date, or Firestore Timestamp
+        const parseDate = (val: any) => {
+          if (!val) return 0;
+          if (typeof val === 'string') return new Date(val).getTime();
+          if (val instanceof Date) return val.getTime();
+          if (typeof val.toDate === 'function') return val.toDate().getTime();
+          if (typeof val.seconds === 'number') return val.seconds * 1000;
+          return new Date(val).getTime();
+        };
+
+        // Sort ascending by createdAt in memory
+        loaded.sort((a, b) => parseDate(a.createdAt) - parseDate(b.createdAt));
+
         setMessages(loaded);
       }, (error) => {
         handleFirestoreError(error, OperationType.LIST, path);
@@ -566,6 +600,7 @@ export default function App() {
 
       const decoder = new TextDecoder();
       let buffer = "";
+      let lastUpdate = Date.now();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -588,19 +623,23 @@ export default function App() {
             if (parsed.text) {
               accumulatedText += parsed.text;
               
-              // Incrementally update UI with streamed text tokens!
-              setMessages(prev => {
-                const filtered = prev.filter(m => m.messageId !== assistantMessageId);
-                const streamedMsg: ChatMessage = {
-                  messageId: assistantMessageId,
-                  chatId: activeId!,
-                  userId: user.uid,
-                  role: 'assistant',
-                  content: accumulatedText,
-                  createdAt: new Date().toISOString()
-                };
-                return [...filtered, streamedMsg];
-              });
+              const now = Date.now();
+              // Update state at most every 80ms to prevent heavy React re-renders and key lagging
+              if (now - lastUpdate > 80) {
+                lastUpdate = now;
+                setMessages(prev => {
+                  const filtered = prev.filter(m => m.messageId !== assistantMessageId);
+                  const streamedMsg: ChatMessage = {
+                    messageId: assistantMessageId,
+                    chatId: activeId!,
+                    userId: user.uid,
+                    role: 'assistant',
+                    content: accumulatedText,
+                    createdAt: new Date().toISOString()
+                  };
+                  return [...filtered, streamedMsg];
+                });
+              }
             }
           }
         }
@@ -615,6 +654,12 @@ export default function App() {
         content: accumulatedText || "No response received",
         createdAt: new Date().toISOString()
       };
+
+      // Set complete message in local state before writing to firestore
+      setMessages(prev => {
+        const filtered = prev.filter(m => m.messageId !== assistantMessageId);
+        return [...filtered, completeAssistantMsg];
+      });
 
       if (isLocalFallback) {
         const localCurrentMsgsRaw = localStorage.getItem(`nextray_msgs_${activeId}`);
