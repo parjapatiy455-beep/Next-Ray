@@ -10,7 +10,8 @@ import {
   Cpu,
   RefreshCw,
   Menu,
-  X
+  X,
+  PanelLeftClose
 } from 'lucide-react';
 import { ChatSession, UserProfile } from '../types';
 import { AVAILABLE_MODELS } from '../lib/models';
@@ -27,6 +28,8 @@ interface SidebarProps {
   isLocal: boolean;
   isSidebarOpen: boolean;
   setIsSidebarOpen: (open: boolean) => void;
+  isSidebarCollapsed: boolean;
+  setIsSidebarCollapsed: (collapsed: boolean) => void;
 }
 
 export default function Sidebar({
@@ -41,6 +44,8 @@ export default function Sidebar({
   isLocal,
   isSidebarOpen,
   setIsSidebarOpen,
+  isSidebarCollapsed,
+  setIsSidebarCollapsed,
 }: SidebarProps) {
   // Find model logo/badge
   const getModelLabel = (modelId: string) => {
@@ -59,15 +64,15 @@ export default function Sidebar({
       )}
 
       <aside className={`
-        fixed inset-y-0 left-0 z-50 flex flex-col w-[280px] bg-slate-50 border-r border-slate-200 text-slate-700 transition-transform duration-300 transform
+        fixed inset-y-0 left-0 z-50 flex flex-col w-[280px] bg-slate-50 border-r border-slate-200 text-slate-700 transition-all duration-300 transform
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:translate-x-0 md:static md:flex
+        ${isSidebarCollapsed ? 'md:hidden' : 'md:flex md:translate-x-0 md:static'}
       `}>
         {/* Sidebar Header with Brand */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <img 
-              src="https://i.ibb.co/Jw45NHVk/logo.jpg" 
+              src="/icon-pwa.png" 
               alt="Next Ray Brand Logo" 
               className="h-8 w-8 rounded-lg object-contain bg-slate-900 border border-slate-700/20" 
               referrerPolicy="no-referrer"
@@ -81,12 +86,21 @@ export default function Sidebar({
               </span>
             </div>
           </div>
-          <button 
-            onClick={() => setIsSidebarOpen(false)}
-            className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-150"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button 
+              onClick={() => setIsSidebarCollapsed(true)}
+              className="hidden md:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-650 hover:bg-slate-200 transition-colors cursor-pointer"
+              title="Collapse Sidebar"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+            <button 
+              onClick={() => setIsSidebarOpen(false)}
+              className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-150"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {/* Action Button: Create New Chat */}

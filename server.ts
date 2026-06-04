@@ -110,6 +110,21 @@ app.get("/api/config", (req, res) => {
   });
 });
 
+// Server-side slug generation endpoint (similar to ChatGPT slug service)
+app.post("/api/chats/slug", (req, res) => {
+  const { title, id } = req.body;
+  const sanitized = (title || 'New Conversation')
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')     // remove non-alphanumeric except hyphen and space
+    .replace(/[\s_]+/g, '-')       // replace spaces or underscore with single hyphen
+    .replace(/^-+|-+$/g, '');      // trim leading/trailing hyphens
+  
+  const shortId = id ? id.substring(id.length - 6) : 'unknown';
+  const slug = sanitized ? `${sanitized}-${shortId}` : shortId;
+  res.json({ slug });
+});
+
 // 2. API: Safe NVIDIA completion with streaming proxy using OpenAI SDK
 app.post("/api/chat/nvidia", async (req, res) => {
   try {

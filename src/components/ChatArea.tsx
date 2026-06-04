@@ -72,7 +72,7 @@ const MessageItem = React.memo(function MessageItem({
       {isAssistant && (
         <div className="h-8 w-8 rounded-full overflow-hidden bg-slate-900 border border-slate-705/10 flex items-center justify-center select-none flex-shrink-0 animate-in fade-in">
           <img 
-            src="https://i.ibb.co/Jw45NHVk/logo.jpg" 
+            src="/icon-pwa.png" 
             alt="Next Ray" 
             className="h-full w-full object-cover"
             referrerPolicy="no-referrer"
@@ -670,7 +670,7 @@ export default function ChatArea({
           <div className="max-w-2xl mx-auto py-16 md:py-24 space-y-12 select-none">
             <div className="text-center space-y-3">
               <div className="mx-auto h-12 w-12 rounded-2xl overflow-hidden bg-slate-900 border border-slate-700/20 flex items-center justify-center shadow-lg animate-pulse mb-4">
-                <img src="https://i.ibb.co/Jw45NHVk/logo.jpg" alt="Next Ray Logo" className="h-[36px] w-[36px] object-contain" />
+                <img src="/icon-pwa.png" alt="Next Ray Logo" className="h-[36px] w-[36px] object-contain" />
               </div>
               <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-800 font-sans">
                 What are you working on?
@@ -729,7 +729,7 @@ export default function ChatArea({
               <div className="flex gap-4 items-start py-4 w-full">
                 {/* Brand Active Avatar */}
                 <div className="h-8 w-8 rounded-full overflow-hidden bg-slate-900 border border-slate-705/10 flex items-center justify-center select-none flex-shrink-0 animate-pulse">
-                  <img src="https://i.ibb.co/Jw45NHVk/logo.jpg" alt="Next Ray" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                  <img src="/icon-pwa.png" alt="Next Ray" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                 </div>
                 
                 {/* Sleek Thinking Chat Bubble & Dots */}

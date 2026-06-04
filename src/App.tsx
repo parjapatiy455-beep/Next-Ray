@@ -14,7 +14,9 @@ import {
   MessageSquareOff,
   CpuIcon,
   Settings,
-  Clock
+  Clock,
+  PanelLeft,
+  PanelLeftClose
 } from 'lucide-react';
 
 import { 
@@ -202,10 +204,46 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isStreamLoading, setIsStreamLoading] = useState(false);
   const [serverKeyConfigured, setServerKeyConfigured] = useState(false);
   const [isWorkbenchOpen, setIsWorkbenchOpen] = useState(false);
+
+  // Cookie persistence helper functions for lightning-fast start pre-hydration
+  const setCookie = (name: string, value: string, days: number = 7) => {
+    const expires = new Date(Date.now() + days * 864e5).toUTCString();
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+  };
+
+  const getCookie = (name: string): string => {
+    try {
+      return document.cookie.split('; ').reduce((r, v) => {
+        const parts = v.split('=');
+        return parts[0] === name ? decodeURIComponent(parts[1] || '') : r;
+      }, '');
+    } catch (e) {
+      return '';
+    }
+  };
+
+  // Secure server-side slug generation fetch command (ChatGPT styled endpoint)
+  const getServerSlug = async (title: string, id: string): Promise<string> => {
+    try {
+      const response = await fetch('/api/chats/slug', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, id })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.slug) return data.slug;
+      }
+    } catch (err) {
+      console.warn("Could not retrieve server-side slug, falling back:", err);
+    }
+    return createSlug(title, id);
+  };
   
   // Email-Password Authentication Credentials States
   const [authEmail, setAuthEmail] = useState('');
@@ -340,7 +378,7 @@ Layouts:
     }
   }, []);
 
-  // 3. Sync Conversations (Chats list)
+  // 3. Sync Conversations (Chats list) with local Cache (SWR) & Cookie persistence
   useEffect(() => {
     if (!user) {
       setSessions([]);
@@ -349,11 +387,48 @@ Layouts:
       return;
     }
 
+    // A. IMMEDIATE CACHE RECOVERY: Load from localStorage cache first to ensure absolute zero lag
+    const sessionsCacheKey = `nextray_sessions_cache_${user.uid}`;
+    const cachedRaw = localStorage.getItem(sessionsCacheKey);
+    let cachedSessions: ChatSession[] = [];
+    if (cachedRaw) {
+      try {
+        cachedSessions = JSON.parse(cachedRaw);
+        if (cachedSessions && cachedSessions.length > 0) {
+          setSessions(cachedSessions);
+          
+          // speculative thread pre-selection on startup
+          if (!currentSessionId) {
+            const hParts = window.location.hash;
+            const hSlug = hParts.startsWith('#/chat/') ? hParts.replace('#/chat/', '') : '';
+            const pParts = window.location.pathname.split('/');
+            const pSlug = (pParts[1] === 'chat' && pParts[2]) ? pParts[2] : '';
+            const activeSlug = pSlug || hSlug;
+            
+            let preSelectedId = null;
+            if (activeSlug) {
+              const matched = cachedSessions.find(s => s.slug === activeSlug || s.chatId === activeSlug);
+              if (matched) preSelectedId = matched.chatId;
+            }
+            if (!preSelectedId) {
+              const savedCookieSession = getCookie("nextray_current_session");
+              if (savedCookieSession && cachedSessions.some(s => s.chatId === savedCookieSession)) {
+                preSelectedId = savedCookieSession;
+              }
+            }
+            if (!preSelectedId) preSelectedId = cachedSessions[0].chatId;
+            setCurrentSessionId(preSelectedId);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not pre-hydrate sessions from local cookie cache:", err);
+      }
+    }
+
     if (isLocalFallback) {
-      // Load sessions from LocalStorage
+      // Load sessions from LocalStorage fallback
       const localSessionsRaw = localStorage.getItem(`nextray_sessions_${user.uid}`);
       const loaded: ChatSession[] = localSessionsRaw ? JSON.parse(localSessionsRaw) : [];
-      // Sort descending by updatedAt
       loaded.sort((a, b) => {
         const d1 = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
         const d2 = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
@@ -366,6 +441,8 @@ Layouts:
         return s;
       });
       setSessions(loadedWithSlugs);
+      localStorage.setItem(sessionsCacheKey, JSON.stringify(loadedWithSlugs));
+
       if (loadedWithSlugs.length > 0 && !currentSessionId) {
         const hash = window.location.hash;
         const slugStr = hash.startsWith('#/chat/') ? hash.replace('#/chat/', '') : '';
@@ -378,7 +455,7 @@ Layouts:
         setCurrentSessionId(targetId);
       }
     } else {
-      // Firestore Live Query without orderBy to completely bypass the need for composite indexes!
+      // Firestore Live Query without orderBy to minimize operational costs
       const path = 'chats';
       const chatsQuery = query(
         collection(db, "chats"),
@@ -391,7 +468,6 @@ Layouts:
           loaded.push(doc.data() as ChatSession);
         });
 
-        // Helper to safely parse dates that could be ISO string, JS Date, or Firestore Timestamp
         const parseDate = (val: any) => {
           if (!val) return 0;
           if (typeof val === 'string') return new Date(val).getTime();
@@ -401,7 +477,6 @@ Layouts:
           return new Date(val).getTime();
         };
 
-        // Sort descending by updatedAt in memory
         loaded.sort((a, b) => parseDate(b.updatedAt) - parseDate(a.updatedAt));
 
         const loadedWithSlugs = loaded.map(s => {
@@ -410,13 +485,25 @@ Layouts:
           }
           return s;
         });
+        
+        // Save back to persistent offline cache
+        localStorage.setItem(sessionsCacheKey, JSON.stringify(loadedWithSlugs));
         setSessions(loadedWithSlugs);
+
         if (loadedWithSlugs.length > 0 && !currentSessionId) {
+          const pParts = window.location.pathname.split('/');
+          const pSlug = (pParts[1] === 'chat' && pParts[2]) ? pParts[2] : '';
           const hash = window.location.hash;
-          const slugStr = hash.startsWith('#/chat/') ? hash.replace('#/chat/', '') : '';
+          const slugStr = pSlug || (hash.startsWith('#/chat/') ? hash.replace('#/chat/', '') : '');
+          
           let targetId = null;
           if (slugStr) {
             const found = loadedWithSlugs.find(s => s.slug === slugStr || s.chatId === slugStr);
+            if (found) targetId = found.chatId;
+          }
+          if (!targetId) {
+            const cookieSession = getCookie("nextray_current_session");
+            const found = loadedWithSlugs.find(s => s.chatId === cookieSession);
             if (found) targetId = found.chatId;
           }
           if (!targetId) targetId = loadedWithSlugs[0].chatId;
@@ -430,36 +517,56 @@ Layouts:
     }
   }, [user]);
 
-  // 3b. Slug Hash Synchronization
-  // Listener for slug hash changes in URL bar (Browser -> React state)
+  // 3b. Clean Path and Hash sync listener (ChatGpt routing sync)
   useEffect(() => {
-    const handleHashChange = () => {
+    const handleLocationSync = () => {
+      const pParts = window.location.pathname.split('/');
+      const pSlug = (pParts[1] === 'chat' && pParts[2]) ? pParts[2] : '';
       const hash = window.location.hash;
-      if (hash.startsWith('#/chat/')) {
-        const slugStr = hash.replace('#/chat/', '');
-        if (slugStr) {
-          const found = sessions.find(s => s.slug === slugStr || s.chatId === slugStr);
-          if (found && found.chatId !== currentSessionId) {
-            setCurrentSessionId(found.chatId);
-          }
+      const hSlug = hash.startsWith('#/chat/') ? hash.replace('#/chat/', '') : '';
+      
+      const activeSlugStr = pSlug || hSlug;
+      if (activeSlugStr) {
+        const found = sessions.find(s => s.slug === activeSlugStr || s.chatId === activeSlugStr);
+        if (found && found.chatId !== currentSessionId) {
+          setCurrentSessionId(found.chatId);
         }
       }
     };
 
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    window.addEventListener('hashchange', handleLocationSync);
+    window.addEventListener('popstate', handleLocationSync);
+    return () => {
+      window.removeEventListener('hashchange', handleLocationSync);
+      window.removeEventListener('popstate', handleLocationSync);
+    };
   }, [sessions, currentSessionId]);
 
-  // Synchronizer from React state -> URL Bar Hash
+  // 3c. Synchronizer from Active chat ID state -> Browser URL Bar / PushState (ChatGPT modern URLs)
   useEffect(() => {
     if (currentSessionId && sessions.length > 0) {
       const active = sessions.find(s => s.chatId === currentSessionId);
       if (active) {
-        const activeSlug = active.slug || active.chatId;
+        const activeSlug = active.slug || createSlug(active.title, active.chatId);
+        
+        // Modern URL path
+        try {
+          const nextURL = `/chat/${activeSlug}`;
+          if (window.location.pathname !== nextURL) {
+            window.history.pushState({ chatId: currentSessionId }, '', nextURL);
+          }
+        } catch (e) {
+          console.warn("popState routing fallback");
+        }
+        
+        // Legacy hash path
         const targetHash = `#/chat/${activeSlug}`;
         if (window.location.hash !== targetHash) {
           window.location.hash = targetHash;
         }
+
+        // Cache persistent active cookie
+        setCookie("nextray_current_session", currentSessionId, 7);
       }
     } else if (!currentSessionId) {
       if (window.location.hash.startsWith('#/chat/')) {
@@ -468,7 +575,7 @@ Layouts:
     }
   }, [currentSessionId, sessions]);
 
-  // 4. Sync Messages belonging to selected Conversation Thread
+  // 4. Sync Messages belonging to selected Conversation Thread with SWR Caching
   useEffect(() => {
     if (!user || !currentSessionId) {
       setMessages([]);
@@ -485,6 +592,20 @@ Layouts:
       }));
     }
 
+    // A. PRE-HYDRATE MESSAGE BUBBLES FROM ACTIVE LOCAL CACHE
+    const messagesCacheKey = `nextray_messages_cache_${currentSessionId}`;
+    const cachedMsgsRaw = localStorage.getItem(messagesCacheKey);
+    if (cachedMsgsRaw) {
+      try {
+        const cached = JSON.parse(cachedMsgsRaw);
+        if (cached && cached.length > 0) {
+          setMessages(cached);
+        }
+      } catch (e) {
+        console.warn("Could not pre-hydrate active messages from cache:", e);
+      }
+    }
+
     if (isLocalFallback) {
       // LocalStorage Messages Loading
       const localMsgsRaw = localStorage.getItem(`nextray_msgs_${currentSessionId}`);
@@ -495,6 +616,7 @@ Layouts:
         return d1 - d2;
       });
       setMessages(loaded);
+      localStorage.setItem(messagesCacheKey, JSON.stringify(loaded));
     } else {
       // Firestore Real-Time Query of subcollection messages - Safe in-memory sorting
       const path = `chats/${currentSessionId}/messages`;
@@ -522,6 +644,7 @@ Layouts:
         loaded.sort((a, b) => parseDate(a.createdAt) - parseDate(b.createdAt));
 
         setMessages(loaded);
+        localStorage.setItem(messagesCacheKey, JSON.stringify(loaded));
       }, (error) => {
         handleFirestoreError(error, OperationType.LIST, path);
       });
@@ -621,6 +744,7 @@ Layouts:
   const handleNewSession = async () => {
     if (!user) return;
     const newId = makeId();
+    const serverSlug = await getServerSlug('New Conversation Thread', newId);
     const newSession: ChatSession = {
       chatId: newId,
       userId: user.uid,
@@ -628,7 +752,7 @@ Layouts:
       model: config.modelId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      slug: createSlug('New Conversation Thread', newId)
+      slug: serverSlug
     };
 
     if (isLocalFallback) {
@@ -725,6 +849,7 @@ Layouts:
     if (!activeId) {
       const newId = makeId();
       const sTitle = text.substring(0, 36) + (text.length > 36 ? '...' : '');
+      const serverSlug = await getServerSlug(sTitle, newId);
       const newSession: ChatSession = {
         chatId: newId,
         userId: user.uid,
@@ -732,7 +857,7 @@ Layouts:
         model: config.modelId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        slug: createSlug(sTitle, newId)
+        slug: serverSlug
       };
 
       activeId = newId;
@@ -801,7 +926,7 @@ Layouts:
     const thread = sessions.find(s => s.chatId === activeId);
     if (thread && thread.title === "New Conversation Thread") {
       const parsedTitle = text.length > 36 ? text.substring(0, 35) + "..." : text;
-      const newSlug = createSlug(parsedTitle, activeId);
+      const newSlug = await getServerSlug(parsedTitle, activeId);
       const updatedSess = sessions.map(s => {
         if (s.chatId === activeId) return { ...s, title: parsedTitle, slug: newSlug };
         return s;
@@ -1013,6 +1138,8 @@ Layouts:
         isLocal={isLocalFallback}
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
+        isSidebarCollapsed={isSidebarCollapsed}
+        setIsSidebarCollapsed={setIsSidebarCollapsed}
       />
 
       {/* Primary chat workspace area */}
@@ -1021,6 +1148,16 @@ Layouts:
         {/* Unified sleek navigation and active session controls header */}
         <div className="h-14 px-4 border-b border-slate-100 bg-white flex items-center md:px-6 justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3">
+            {isSidebarCollapsed && (
+              <button
+                onClick={() => setIsSidebarCollapsed(false)}
+                className="hidden md:flex p-2 rounded-lg text-slate-450 hover:text-slate-700 hover:bg-slate-50 transition-all border border-slate-200 justify-center items-center cursor-pointer"
+                title="Expand Sidebar"
+              >
+                <PanelLeft className="h-4.5 w-4.5" />
+              </button>
+            )}
+
             <button
               onClick={() => setIsSidebarOpen(true)}
               className="md:hidden p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-all border border-slate-200"
