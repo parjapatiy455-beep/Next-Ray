@@ -265,11 +265,64 @@ export default function VoiceAgentPanel({
       await audio.play();
     } catch (err: any) {
       if (speakTimerRef.current) clearInterval(speakTimerRef.current);
-      console.error(err);
-      setErrorMsg(err.message || "Synthesis cluster error. Verify GEMINI_API_KEY.");
-      setCallState('LISTENING');
-      setLiveVolume(0);
-      startSpeechRecognition();
+      console.warn("Premium Gemini TTS fell back to local browser speech synthesizer:", err);
+      
+      try {
+        window.speechSynthesis.cancel();
+        
+        // Ensure active speech recognition does not capture audio synthesized output as input
+        stopSpeechRecognition();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // Match chosen voice preference if possible
+        utterance.rate = voiceSpeed || 1.0;
+        
+        const voices = window.speechSynthesis.getVoices();
+        let matchedVoice = null;
+        if (languageMode === 'hindi' || languageMode === 'bilingual') {
+          matchedVoice = voices.find(v => v.lang.startsWith('hi-') || v.lang.startsWith('en-IN')) || voices.find(v => v.lang.startsWith('en-'));
+        } else {
+          matchedVoice = voices.find(v => v.lang.startsWith('en-'));
+        }
+        if (matchedVoice) {
+          utterance.voice = matchedVoice;
+        }
+
+        setCallState('SPEAKING');
+        
+        // Setup visual ripple waves for voice amplitude simulation
+        speakTimerRef.current = setInterval(() => {
+          if (!window.speechSynthesis.speaking) {
+            if (speakTimerRef.current) clearInterval(speakTimerRef.current);
+            return;
+          }
+          setLiveVolume(18 + Math.random() * 42);
+        }, 76);
+
+        utterance.onend = () => {
+          if (speakTimerRef.current) clearInterval(speakTimerRef.current);
+          setCallState('LISTENING');
+          setLiveVolume(0);
+          startSpeechRecognition();
+        };
+
+        utterance.onerror = (evt) => {
+          console.warn("Local speech synthesis warning:", evt);
+          if (speakTimerRef.current) clearInterval(speakTimerRef.current);
+          setCallState('LISTENING');
+          setLiveVolume(0);
+          startSpeechRecognition();
+        };
+
+        window.speechSynthesis.speak(utterance);
+      } catch (speechErr) {
+        console.error("Local SpeechSynthesis failed completely:", speechErr);
+        setErrorMsg("Voice system offline. Please verify API endpoints.");
+        setCallState('LISTENING');
+        setLiveVolume(0);
+        startSpeechRecognition();
+      }
     }
   };
 
