@@ -67,7 +67,7 @@ export default function Sidebar({
         <div className="p-5 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <img 
-              src="/icon-pwa.png" 
+              src="/logo.jpeg" 
               alt="Next Ray Brand Logo" 
               className="h-8 w-8 rounded-lg object-contain bg-slate-900 border border-slate-700/20" 
               referrerPolicy="no-referrer"
