@@ -59,7 +59,7 @@ export default function VoiceAgentPanel({
     return localStorage.getItem('nextray_selected_voice') || 'Kore';
   });
 
-  const [languageMode, setLanguageMode] = useState<'bilingual' | 'english'>('bilingual'); // Bilingual: Hindi + English (Hinglish)
+  const [languageMode, setLanguageMode] = useState<'bilingual' | 'english' | 'hindi'>('bilingual'); // Bilingual: Hindi + English (Hinglish)
   const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0); // Conversational speed multiplier
 
   // Call States
@@ -85,6 +85,7 @@ export default function VoiceAgentPanel({
   const recognitionActiveRef = useRef<boolean>(false);
   const speakTimerRef = useRef<any>(null);
   const ignoreVolumeThresholdRef = useRef<boolean>(false); // Ignore user voice during first split second of speech
+  const transcriptRef = useRef<string>('');
 
   useEffect(() => {
     localStorage.setItem('nextray_selected_voice', selectedVoice);
@@ -300,15 +301,18 @@ export default function VoiceAgentPanel({
       
       // Auto-configure optimal dialects
       if (languageMode === 'bilingual') {
-        recognition.lang = 'en-IN'; // Indian accent (optimal for Hinglish)
+        recognition.lang = 'en-IN'; // Indian English / accent (optimal for Hinglish)
+      } else if (languageMode === 'hindi') {
+        recognition.lang = 'hi-IN'; // Pure Hindi dialect
       } else {
-        recognition.lang = 'en-US'; // Neutral English
+        recognition.lang = 'en-US'; // Neutral US English
       }
 
       recognition.onstart = () => {
         recognitionActiveRef.current = true;
         setCallState('LISTENING');
         setTranscript('');
+        transcriptRef.current = '';
         setErrorMsg(null);
       };
 
@@ -326,10 +330,11 @@ export default function VoiceAgentPanel({
 
         const currentText = finalTranscript || interimTranscript;
         setTranscript(currentText);
+        transcriptRef.current = currentText;
 
         // Interrupt assistant speaking instantly if transcription starts producing text
         if (callState === 'SPEAKING') {
-          console.log("[Voice Agent Interruption] Transcription text feedback detected.");
+          console.log("[Voice Agent Interruption] User speech sound detected.");
           stopPlayback();
           setLiveVolume(0);
           setCallState('LISTENING');
@@ -346,52 +351,54 @@ export default function VoiceAgentPanel({
         recognitionActiveRef.current = false;
         setLiveVolume(0);
         
+        const finalSpeech = transcriptRef.current.trim();
+        transcriptRef.current = '';
+        setTranscript('');
+
         // If we are still in listening mode, check if we parsed anything meaningful to answer
         if (recognitionRef.current) {
-          setTranscript(prev => {
-            const finalSpeech = prev.trim();
-            if (finalSpeech.length >= 2) {
-              setCallState('THINKING');
-              
-              // Optimized high-speed vocal system prompts
-              // We instruct whichever LLM model is selected (even free NVIDIA ones) to reply in 1-2 lines for maximum speed!
-              const systemDirectives = [
-                `[System voice call directive: Speak in soft, realistic, comforting human phrasing. Provide a snappy, quick, and ultra-short conversational reply in maximum 1 or 2 lines of text. Do NOT emit markdown, code blocks, bullet points, or list structures under any circumstance. Answer directly and sweetly as if in a direct live phone call.]`
-              ];
+          if (finalSpeech.length >= 2) {
+            setCallState('THINKING');
+            
+            // Optimized high-speed vocal system prompts
+            // We instruct whichever LLM model is selected (even free NVIDIA ones) to reply in 1-2 lines for maximum speed!
+            const systemDirectives = [
+              `[System voice call directive: Speak in soft, realistic, comforting human phrasing. Provide a snappy, quick, and ultra-short conversational reply in maximum 1 or 2 lines of text. Do NOT emit markdown, code blocks, bullet points, or list structures under any circumstance. Answer directly and sweetly as if in a direct live phone call.]`
+            ];
 
-              if (personalBio.trim()) {
-                systemDirectives.push(`[Your relationship profile summary for Parjapati: ${personalBio.trim()}]`);
-              }
+            if (personalBio.trim()) {
+              systemDirectives.push(`[Your relationship profile summary for Parjapati: ${personalBio.trim()}]`);
+            }
 
-              if (languageMode === 'bilingual') {
-                systemDirectives.push(`[Conversational language: You can blend both simple Hindi and English (Hinglish tone) sweetly as requested. Keep Hindi words simple, sweet, and warm.]`);
-              }
+            if (languageMode === 'bilingual') {
+              systemDirectives.push(`[Conversational language: You can blend both simple Hindi and English (Hinglish tone) sweetly as requested. Keep Hindi words simple, sweet, and warm.]`);
+            } else if (languageMode === 'hindi') {
+              systemDirectives.push(`[Conversational language: Respond purely in simple, very sweet and warm Hindi (using Devanagari script). Keep the voice soft and realistic.]`);
+            }
 
-              const processedText = `${finalSpeech}\n\n${systemDirectives.join('\n')}`;
-              
-              onSendMessage(processedText).then((responseContent) => {
-                if (responseContent) {
-                  // Clean response of brackets to keep speech clean
-                  const cleanResponse = responseContent.replace(/\[[\s\S]*?\]/g, "");
-                  speakWithGemini(cleanResponse);
-                } else {
-                  setCallState('LISTENING');
-                  startSpeechRecognition();
-                }
-              }).catch(() => {
+            const processedText = `${finalSpeech}\n\n${systemDirectives.join('\n')}`;
+            
+            onSendMessage(processedText).then((responseContent) => {
+              if (responseContent) {
+                // Clean response of brackets to keep speech clean
+                const cleanResponse = responseContent.replace(/\[[\s\S]*?\]/g, "");
+                speakWithGemini(cleanResponse);
+              } else {
                 setCallState('LISTENING');
                 startSpeechRecognition();
-              });
-            } else {
-              // Loop back and listen again if empty transcript was generated
-              if (callState === 'LISTENING') {
-                try {
-                  recognition.start();
-                } catch(e) {}
               }
+            }).catch(() => {
+              setCallState('LISTENING');
+              startSpeechRecognition();
+            });
+          } else {
+            // Loop back and listen again if empty transcript was generated
+            if (callState === 'LISTENING') {
+              try {
+                recognition.start();
+              } catch(e) {}
             }
-            return '';
-          });
+          }
         }
       };
 
@@ -649,26 +656,36 @@ export default function VoiceAgentPanel({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-1.5">
             <button
               onClick={() => setLanguageMode('bilingual')}
-              className={`p-2 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer ${
+              className={`py-2 px-1 rounded-xl text-[10px] font-bold border transition-colors cursor-pointer text-center ${
                 languageMode === 'bilingual'
                   ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
                   : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
               }`}
             >
-              Hinglish (Mix Hindi + Eng)
+              Hinglish (Mix)
+            </button>
+            <button
+              onClick={() => setLanguageMode('hindi')}
+              className={`py-2 px-1 rounded-xl text-[10px] font-bold border transition-colors cursor-pointer text-center ${
+                languageMode === 'hindi'
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Pure Hindi
             </button>
             <button
               onClick={() => setLanguageMode('english')}
-              className={`p-2 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer ${
+              className={`py-2 px-1 rounded-xl text-[10px] font-bold border transition-colors cursor-pointer text-center ${
                 languageMode === 'english'
                   ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
                   : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
               }`}
             >
-              English Only (US Dialect)
+              English US
             </button>
           </div>
 
