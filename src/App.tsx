@@ -16,7 +16,8 @@ import {
   Settings,
   Clock,
   PanelLeft,
-  PanelLeftClose
+  PanelLeftClose,
+  Volume2
 } from 'lucide-react';
 
 import { 
@@ -50,6 +51,7 @@ import ChatArea from './components/ChatArea';
 import ModelSelector from './components/ModelSelector';
 import SettingsPanel from './components/SettingsPanel';
 import InteractiveWorkbench from './components/InteractiveWorkbench';
+import VoiceAgentPanel from './components/VoiceAgentPanel';
 import { AVAILABLE_MODELS } from './lib/models';
 
 function extractDecksAndHtml(text: string) {
@@ -209,6 +211,7 @@ export default function App() {
   const [isStreamLoading, setIsStreamLoading] = useState(false);
   const [serverKeyConfigured, setServerKeyConfigured] = useState(false);
   const [isWorkbenchOpen, setIsWorkbenchOpen] = useState(false);
+  const [isVoicePanelOpen, setIsVoicePanelOpen] = useState(false);
 
   // Cookie persistence helper functions for lightning-fast start pre-hydration
   const setCookie = (name: string, value: string, days: number = 7) => {
@@ -1098,6 +1101,8 @@ Layouts:
         }, 300);
       }
 
+      return accumulatedText;
+
     } catch (err: any) {
       console.error("AI Completion error:", err);
       
@@ -1114,6 +1119,8 @@ Layouts:
         const filtered = prev.filter(m => m.messageId !== assistantMessageId);
         return [...filtered, errorMsg];
       });
+
+      return null;
 
     } finally {
       setIsStreamLoading(false);
@@ -1196,6 +1203,19 @@ Layouts:
                 </button>
 
                 <button
+                  onClick={() => setIsVoicePanelOpen(prev => !prev)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-bold transition-all active:scale-[0.98] cursor-pointer ${
+                    isVoicePanelOpen 
+                      ? 'bg-indigo-600 border-indigo-600 text-white font-extrabold shadow-md' 
+                      : 'border-slate-200 text-slate-755 bg-white hover:bg-slate-50'
+                  }`}
+                  title="Toggle Natural Voice Companion"
+                >
+                  <Volume2 className={`h-3.5 w-3.5 ${isVoicePanelOpen ? 'text-white' : 'text-indigo-500'}`} />
+                  <span>Voice Agent</span>
+                </button>
+
+                <button
                   onClick={() => setIsWorkbenchOpen(prev => !prev)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-bold transition-all active:scale-[0.98] cursor-pointer ${
                     isWorkbenchOpen 
@@ -1234,6 +1254,15 @@ Layouts:
               serverKeyConfigured={serverKeyConfigured}
               onQuickPrompt={(text) => handleSendMessage(text)}
             />
+            {isVoicePanelOpen && (
+              <VoiceAgentPanel
+                isOpen={isVoicePanelOpen}
+                onClose={() => setIsVoicePanelOpen(false)}
+                onSendMessage={handleSendMessage}
+                isStreamLoading={isStreamLoading}
+                messages={messages}
+              />
+            )}
             {isWorkbenchOpen && (
               <InteractiveWorkbench
                 onClose={() => setIsWorkbenchOpen(false)}

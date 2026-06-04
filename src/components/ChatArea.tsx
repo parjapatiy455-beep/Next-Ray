@@ -365,6 +365,7 @@ export default function ChatArea({
 }: ChatAreaProps) {
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [isSpeakingId, setIsSpeakingId] = useState<string | null>(null);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   
   // File upload state variables
   const [attachedFile, setAttachedFile] = useState<{
@@ -462,6 +463,10 @@ export default function ChatArea({
   useEffect(() => {
     return () => {
       window.speechSynthesis.cancel();
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+        activeAudioRef.current = null;
+      }
     };
   }, []);
 
@@ -563,32 +568,68 @@ export default function ChatArea({
     setTimeout(() => setCopiedMessageId(null), 2000);
   };
 
-  // Speak response aloud using browser synthesis
-  const handleSpeakText = (text: string, msgId: string) => {
+  // Speak response aloud using high-fidelity Gemini synthesis
+  const handleSpeakText = async (text: string, msgId: string) => {
     if (isSpeakingId === msgId) {
-      window.speechSynthesis.cancel();
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+        activeAudioRef.current = null;
+      }
       setIsSpeakingId(null);
       return;
     }
 
-    window.speechSynthesis.cancel();
+    // Halt any active audio
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+    }
     
-    // Clean up markdown tags for cleaner narrative sounding
-    const cleanSpeech = text
-      .replace(/```[\s\S]*?```/g, '[code block omitted]')
-      .replace(/[*#_~`-]/g, '')
-      .slice(0, 1000); // cap size
-
-    const utterance = new SpeechSynthesisUtterance(cleanSpeech);
-    utterance.onend = () => {
-      setIsSpeakingId(null);
-    };
-    utterance.onerror = () => {
-      setIsSpeakingId(null);
-    };
-
     setIsSpeakingId(msgId);
-    window.speechSynthesis.speak(utterance);
+    
+    try {
+      const cleanSpeech = text
+        .replace(/```[\s\S]*?```/g, '') // omit code blocks
+        .replace(/[*#_~`-]/g, '')
+        .slice(0, 1200);
+
+      const preferredVoice = localStorage.getItem('nextray_selected_voice') || 'Kore';
+
+      const response = await fetch('/api/voice/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: cleanSpeech, voiceName: preferredVoice })
+      });
+
+      if (!response.ok) {
+        throw new Error("TTS endpoint failed");
+      }
+
+      const data = await response.json();
+      if (data.success && data.audioDataUrl) {
+        const audio = new Audio(data.audioDataUrl);
+        activeAudioRef.current = audio;
+        audio.onended = () => {
+          setIsSpeakingId(null);
+          activeAudioRef.current = null;
+        };
+        audio.onerror = () => {
+          setIsSpeakingId(null);
+          activeAudioRef.current = null;
+        };
+        await audio.play();
+      } else {
+        throw new Error("Failed playing TTS stream file stream");
+      }
+    } catch (err) {
+      console.warn("Premium TTS generation offline. Reverting to local browser speech:", err);
+      window.speechSynthesis.cancel();
+      const rawText = text.replace(/```[\s\S]*?```/g, '[code block omitted]').replace(/[*#_~`-]/g, '').slice(0, 1000);
+      const utterance = new SpeechSynthesisUtterance(rawText);
+      utterance.onend = () => setIsSpeakingId(null);
+      utterance.onerror = () => setIsSpeakingId(null);
+      window.speechSynthesis.speak(utterance);
+    }
   };
 
   // Initial greeting box items

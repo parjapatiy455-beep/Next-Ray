@@ -125,6 +125,71 @@ app.post("/api/chats/slug", (req, res) => {
   res.json({ slug });
 });
 
+// Voice Synthesis API (TTS) using Gemini 3.1 tts model
+app.post("/api/voice/speak", async (req, res) => {
+  try {
+    const { text, voiceName } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(400).json({ error: "Gemini API key is unconfigured. Please configure GEMINI_API_KEY in the environment." });
+    }
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: "Text prompt is required for vocal synthesis." });
+    }
+
+    // Clean up markdown tags, emojis, and code blocks for smoother vocal flow
+    const cleanText = text
+      .replace(/```[\s\S]*?```/g, "") // Omit code blocks
+      .replace(/`[^`]+`/g, "")       // Omit short code snippets
+      .replace(/[*#_~`-]/g, "")       // Remove formatting symbols
+      .replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, '') // strip emoji
+      .trim();
+
+    if (!cleanText) {
+      return res.status(400).json({ error: "No synthesisable text content after cleansing." });
+    }
+
+    const { GoogleGenAI, Modality } = await import("@google/genai");
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    // Kore: sweet & soft feminine, Zephyr: warm, puck: cheerful
+    const selectedVoice = voiceName || 'Kore'; 
+
+    console.log(`[Next Ray TTS] Synthesizing sequence of length ${cleanText.length} with voice: ${selectedVoice}`);
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-tts-preview",
+      contents: [{ parts: [{ text: cleanText }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: selectedVoice },
+          },
+        },
+      },
+    });
+
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (base64Audio) {
+      return res.json({ success: true, audioDataUrl: `data:audio/wav;base64,${base64Audio}` });
+    } else {
+      throw new Error("Gemini TTS service did not return audio bytes.");
+    }
+  } catch (error: any) {
+    console.error("Speech synthesis error:", error);
+    return res.status(500).json({ error: error.message || "Failed to synthesize speech." });
+  }
+});
+
 // 2. API: Safe NVIDIA completion with streaming proxy using OpenAI SDK
 app.post("/api/chat/nvidia", async (req, res) => {
   try {
