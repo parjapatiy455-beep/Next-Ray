@@ -29,7 +29,7 @@ export async function onRequestPost(context: any): Promise<Response> {
     }
 
     // 1. Test Text Completion using gemini-2.5-flash
-    const textTestUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.1-flash:generateContent?key=${apiKey}`;
+    const textTestUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     let textSuccess = false;
     let textError = "";
     
@@ -63,7 +63,7 @@ export async function onRequestPost(context: any): Promise<Response> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: "OK" }] }],
-          config: {
+          generationConfig: {
             responseModalities: ["AUDIO"],
             speechConfig: {
               voiceConfig: {

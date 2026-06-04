@@ -246,7 +246,7 @@ app.post("/api/voice/diagnose", async (req, res) => {
 
     console.log(`[Next Ray Diagnostics] Testing key of length ${apiKey.length}...`);
 
-    // 1. Test Text Completion using gemini-2.1-flash
+    // 1. Test Text Completion using gemini-2.5-flash
     const textTestUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     let textSuccess = false;
     let textError = "";
@@ -281,7 +281,7 @@ app.post("/api/voice/diagnose", async (req, res) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: "OK" }] }],
-          config: {
+          generationConfig: {
             responseModalities: ["AUDIO"],
             speechConfig: {
               voiceConfig: {

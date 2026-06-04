@@ -99,7 +99,7 @@ export async function speakWithGeminiClientDirect(text: string, voiceName: strin
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ parts: [{ text: cleanText }] }],
-      config: {
+      generationConfig: {
         responseModalities: ["AUDIO"],
         speechConfig: {
           voiceConfig: {

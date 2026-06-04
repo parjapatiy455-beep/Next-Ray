@@ -124,7 +124,7 @@ export async function onRequestPost(context: any): Promise<Response> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: cleanText }] }],
-        config: {
+        generationConfig: {
           responseModalities: ["AUDIO"],
           speechConfig: {
             voiceConfig: {
