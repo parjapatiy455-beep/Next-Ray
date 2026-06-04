@@ -12,7 +12,9 @@ import {
   Sun,
   Layout,
   MessageSquareOff,
-  CpuIcon
+  CpuIcon,
+  Settings,
+  Clock
 } from 'lucide-react';
 
 import { 
@@ -1016,35 +1018,59 @@ Layouts:
       {/* Primary chat workspace area */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         
-        {/* Navigation control header bar for responsive toggle & model selection */}
-        <div className="h-16 px-6 border-b border-slate-100 bg-white flex items-center gap-3 shadow-xs">
-          <button
-            onClick={() => setIsSidebarOpen(true)}
-            className="md:hidden p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-all border border-slate-200"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
+        {/* Unified sleek navigation and active session controls header */}
+        <div className="h-14 px-4 border-b border-slate-100 bg-white flex items-center md:px-6 justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="md:hidden p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-all border border-slate-200"
+            >
+              <Menu className="h-4.5 w-4.5" />
+            </button>
 
-          <ModelSelector
-            selectedModelId={config.modelId}
-            onSelectModel={handleSelectModel}
-          />
+            <ModelSelector
+              selectedModelId={config.modelId}
+              onSelectModel={handleSelectModel}
+            />
 
-          <div className="ml-auto flex items-center gap-2">
             {user && (
-              <button
-                onClick={() => setIsWorkbenchOpen(prev => !prev)}
-                className={`flex items-center gap-1.5 px-3.5 py-2 border rounded-xl text-xs font-bold transition-all active:scale-[0.98] cursor-pointer ${
-                  isWorkbenchOpen 
-                    ? 'bg-slate-900 border-slate-900 text-emerald-400 font-extrabold shadow-md' 
-                    : 'border-slate-205 text-slate-700 bg-white hover:bg-slate-50'
-                }`}
-                title="Open Sandbox & Slides Deck Builder"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Creative Workbench</span>
-                <span className="sm:hidden">Workbench</span>
-              </button>
+              <div className="hidden sm:flex items-center gap-2 text-[11px] text-slate-400 font-mono border-l border-slate-200 pl-3">
+                <Clock className="h-3 w-3 text-emerald-500" />
+                <span className="font-semibold text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                  T: {config.temperature}
+                </span>
+                <span className="font-semibold text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 hidden md:inline">
+                  M: {config.maxTokens}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {user && (
+              <>
+                <button 
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 rounded-lg border border-slate-200 transition-all active:scale-[0.98] cursor-pointer"
+                  title="Configure System prompt and keys"
+                >
+                  <Settings className="h-3.5 w-3.5 text-slate-500" />
+                  <span className="hidden md:inline">Options</span>
+                </button>
+
+                <button
+                  onClick={() => setIsWorkbenchOpen(prev => !prev)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-bold transition-all active:scale-[0.98] cursor-pointer ${
+                    isWorkbenchOpen 
+                      ? 'bg-slate-900 border-slate-900 text-emerald-400 font-extrabold shadow-md' 
+                      : 'border-slate-200 text-slate-755 bg-white hover:bg-slate-50'
+                  }`}
+                  title="Open Sandbox & Slides Deck Builder"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+                  <span>Workbench</span>
+                </button>
+              </>
             )}
             {!user && (
               <button
@@ -1084,8 +1110,13 @@ Layouts:
             <div className="max-w-md w-full p-8 bg-white border border-slate-205/80 rounded-2xl shadow-xl shadow-slate-100 space-y-6 animate-in zoom-in-95 duration-150">
               
               <div className="text-center space-y-2">
-                <div className="mx-auto h-11 w-11 rounded-xl bg-slate-900 flex items-center justify-center text-white shadow-xs">
-                  <Cpu className="h-5 w-5" />
+                <div className="mx-auto h-11 w-11 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/20 flex items-center justify-center shadow-md">
+                  <img 
+                    src="/icon-pwa.png" 
+                    alt="Next Ray Logo" 
+                    className="h-full w-full object-cover" 
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
                 <h2 className="text-xl font-bold text-slate-800 tracking-tight font-sans">
                   Next Ray Space

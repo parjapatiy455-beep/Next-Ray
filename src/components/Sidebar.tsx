@@ -66,9 +66,12 @@ export default function Sidebar({
         {/* Sidebar Header with Brand */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-sm">
-              <div className="w-3.5 h-3.5 border-2 border-white rounded-full"></div>
-            </div>
+            <img 
+              src="/icon-pwa.png" 
+              alt="Next Ray Brand Logo" 
+              className="h-8 w-8 rounded-lg object-contain bg-slate-900 border border-slate-700/20" 
+              referrerPolicy="no-referrer"
+            />
             <div>
               <h1 className="text-lg font-bold tracking-tight text-slate-800">
                 Next Ray

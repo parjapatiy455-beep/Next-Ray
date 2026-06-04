@@ -14,6 +14,95 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json({ limit: "20mb" }));
 
+// PWA routes served directly from the server to guarantee consistency
+app.get("/manifest.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.json({
+    name: "Next Ray — AI Companion",
+    short_name: "Next Ray",
+    description: "An advanced AI model client platform for free NVIDIA NIM models and multimodal Google Gemini API, including Google authentication and Chat completions.",
+    start_url: "/",
+    display: "standalone",
+    background_color: "#0f172a",
+    theme_color: "#0f172a",
+    orientation: "any",
+    icons: [
+      {
+        src: "/icon-pwa.png",
+        sizes: "192x192",
+        type: "image/png"
+      },
+      {
+        src: "/icon-pwa.png",
+        sizes: "512x512",
+        type: "image/png"
+      }
+    ]
+  });
+});
+
+app.get("/sw.js", (req, res) => {
+  res.setHeader("Content-Type", "application/javascript");
+  res.send(`
+    self.addEventListener('install', (e) => {
+      self.skipWaiting();
+    });
+
+    self.addEventListener('activate', (e) => {
+      e.waitUntil(clients.claim());
+    });
+
+    self.addEventListener('fetch', (e) => {
+      e.respondWith(fetch(e.request));
+    });
+  `);
+});
+
+app.get("/icon-pwa.png", (req, res) => {
+  res.sendFile(path.join(process.cwd(), "src/assets/images/next_ray_logo_1780536552543.png"));
+});
+
+// Image Generation API
+app.post("/api/image/generate", async (req, res) => {
+  try {
+    const { prompt, aspectRatio } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(400).json({ error: "Gemini API key is unconfigured. Please configure GEMINI_API_KEY." });
+    }
+
+    const { GoogleGenAI } = await import("@google/genai");
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    const response = await ai.models.generateImages({
+      model: 'imagen-4.0-generate-001',
+      prompt: prompt,
+      config: {
+        numberOfImages: 1,
+        outputMimeType: 'image/jpeg',
+        aspectRatio: aspectRatio || '1:1',
+      },
+    });
+
+    if (response.generatedImages?.[0]?.image?.imageBytes) {
+      const base64Bytes = response.generatedImages[0].image.imageBytes;
+      return res.json({ imageUrl: `data:image/jpeg;base64,${base64Bytes}` });
+    } else {
+      throw new Error("No image was returned by Gemini Imagen.");
+    }
+  } catch (error: any) {
+    console.error("Image generation error:", error);
+    return res.status(500).json({ error: error.message || "Failed to generate image." });
+  }
+});
+
 // 1. API: Server configurations
 app.get("/api/config", (req, res) => {
   res.json({

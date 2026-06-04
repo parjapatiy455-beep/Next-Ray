@@ -16,7 +16,11 @@ import {
   HelpCircle,
   Eye,
   Trash2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Palette,
+  ImageIcon,
+  Loader2,
+  Download
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { ChatMessage, ChatConfig, AIModel } from '../types';
@@ -66,12 +70,13 @@ const MessageItem = React.memo(function MessageItem({
     >
       {/* Left Avatar Column */}
       {isAssistant && (
-        <div className="h-8 w-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs select-none flex-shrink-0 animate-in fade-in">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-            <path d="M2 12h20" />
-          </svg>
+        <div className="h-8 w-8 rounded-full overflow-hidden bg-slate-900 border border-slate-705/10 flex items-center justify-center select-none flex-shrink-0 animate-in fade-in">
+          <img 
+            src="/icon-pwa.png" 
+            alt="Next Ray" 
+            className="h-full w-full object-cover"
+            referrerPolicy="no-referrer"
+          />
         </div>
       )}
 
@@ -115,13 +120,13 @@ const MessageItem = React.memo(function MessageItem({
         )}
 
         {/* Rendering of GPT core content markdown */}
-        <div className={`markdown-body prose max-w-none leading-relaxed font-sans text-sm break-words text-slate-800`}>
+        <div className="markdown-body prose max-w-none leading-relaxed font-sans text-[15px] break-words text-slate-800">
           {isAssistant ? (
-            <div className="prose prose-slate prose-sm text-slate-700 font-sans leading-relaxed">
+            <div className="prose prose-slate prose-base text-slate-700 font-sans leading-relaxed">
               <Markdown>{msg.content}</Markdown>
             </div>
           ) : (
-            <p className="whitespace-pre-wrap leading-relaxed select-text font-normal text-sm">
+            <p className="whitespace-pre-wrap leading-relaxed select-text font-normal text-[15px]">
               {msg.content}
             </p>
           )}
@@ -188,6 +193,7 @@ interface ChatInputFormProps {
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   formatBytes: (bytes: number) => string;
+  onOpenImageGenerator: () => void;
 }
 
 function ChatInputForm({
@@ -198,8 +204,20 @@ function ChatInputForm({
   fileInputRef,
   handleFileChange,
   formatBytes,
+  onOpenImageGenerator,
 }: ChatInputFormProps) {
   const [inputText, setInputText] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // AUTOMATIC KEYBOARD FOCUS: Focus the text box on mount, on submit, and whenever streaming finishes!
+  useEffect(() => {
+    if (!isStreamLoading) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isStreamLoading]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -222,11 +240,16 @@ function ChatInputForm({
     
     setInputText('');
     setAttachedFile(null);
+
+    // Auto-focus after sending
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
   };
 
   return (
-    <footer className="p-6 md:p-8 border-t border-slate-100 bg-white whitespace-nowrap">
-      <div className="max-w-3xl mx-auto space-y-3">
+    <footer className="p-4 md:p-6 border-t border-slate-100 bg-white whitespace-nowrap">
+      <div className="max-w-3xl mx-auto space-y-3 p-1">
         
         {/* Active upload preview handle */}
         {attachedFile && (
@@ -264,15 +287,24 @@ function ChatInputForm({
         {/* Clean Minimalism Absolute Custom Search Input Design template */}
         <div className="relative group w-full">
           <form onSubmit={handleSubmit} className="relative flex items-center w-full">
-            {/* Left attachment clip button absolute inside input */}
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 flex gap-2">
+            {/* Left attachment clip & paints absolute inside input */}
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 rounded-md transition-colors"
+                className="p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-750 rounded-lg transition-colors cursor-pointer"
                 title="Attach File (Images/Code/CSV)"
               >
-                <Paperclip className="h-4 w-4" />
+                <Paperclip className="h-4.5 w-4.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={onOpenImageGenerator}
+                className="p-1.5 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                title="Generate AI Art with Imagen"
+              >
+                <Palette className="h-4.5 w-4.5 text-indigo-600" />
               </button>
             </div>
 
@@ -286,15 +318,16 @@ function ChatInputForm({
 
             <input
               type="text"
+              ref={inputRef}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder={
                 attachedFile 
                   ? "Explain what to analyze in this attachment..." 
-                  : "Ask Next Ray anything..."
+                  : "Ask Next Ray or generate art..."
               }
               disabled={isStreamLoading}
-              className="w-full pl-14 pr-16 py-4 bg-white border-2 border-slate-100 rounded-2xl text-sm focus:outline-none focus:border-indigo-200 transition-all shadow-lg shadow-slate-100 text-slate-800"
+              className="w-full pl-22 pr-12 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:bg-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition-all text-slate-800"
             />
 
             {/* Right submit absolute button inside input */}
@@ -302,16 +335,16 @@ function ChatInputForm({
               <button
                 type="submit"
                 disabled={isStreamLoading || (!inputText.trim() && !attachedFile)}
-                className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-slate-800 disabled:opacity-40 disabled:bg-slate-200 disabled:text-slate-400 transition-colors shadow-md flex items-center justify-center cursor-pointer"
+                className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-slate-800 disabled:opacity-40 disabled:bg-slate-200 disabled:text-slate-400 transition-colors shadow-sm flex items-center justify-center cursor-pointer"
               >
-                <Send className="h-4 w-4" />
+                <Send className="h-3.5 w-3.5" />
               </button>
             </div>
           </form>
         </div>
 
-        <p className="text-center text-[10px] text-slate-400 mt-4 leading-none font-sans">
-          Next Ray utilizes official cloud backends. Results can vary by node. Model status: <span className="text-green-500 font-bold">ONLINE</span>
+        <p className="text-center text-[10px] text-slate-400 mt-2 leading-none font-sans select-none">
+          Next Ray utilize official cloud backends. Results can vary. PWA: <span className="text-emerald-500 font-bold font-mono">INSTALLABLE</span>
         </p>
       </div>
     </footer>
@@ -344,6 +377,62 @@ export default function ChatArea({
   } | null>(null);
   
   const [isDragging, setIsDragging] = useState(false);
+  
+  // Imagen 4 generation panel states
+  const [showImagePanel, setShowImagePanel] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState('');
+  const [imageRatio, setImageRatio] = useState('1:1');
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+
+  const handleGenerateImage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!imagePrompt.trim()) return;
+
+    setIsGeneratingImage(true);
+    setGeneratedImageUrl(null);
+    setImageError(null);
+
+    try {
+      const response = await fetch('/api/image/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: imagePrompt, aspect_ratio: imageRatio })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate image. Please try a different prompt or verify your key configuration.');
+      }
+
+      const data = await response.json();
+      if (data.success && data.imageDataUrl) {
+        setGeneratedImageUrl(data.imageDataUrl);
+      } else {
+        throw new Error(data.error || 'Failed to generate image.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setImageError(err.message || 'Error occurred while contacting image cluster.');
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
+  const handleApplyArtToChat = () => {
+    if (!generatedImageUrl) return;
+    onSendMessage(
+      `Here is the custom AI artwork I generated using the prompt: **"${imagePrompt}"**`,
+      generatedImageUrl,
+      "image/jpeg",
+      `imagen-${Date.now()}.jpg`,
+      180556
+    );
+    // Reset and close
+    setShowImagePanel(false);
+    setImagePrompt('');
+    setGeneratedImageUrl(null);
+  };
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -561,28 +650,6 @@ export default function ChatArea({
         isDragging ? 'ring-4 ring-indigo-100 ring-inset bg-slate-50/50' : ''
       }`}
     >
-      {/* Top Header Controls */}
-      <header className="h-16 border-b border-slate-100 flex items-center px-6 justify-between sticky top-0 bg-white/80 backdrop-blur-md z-10">
-        <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
-          <Clock className="h-3.5 w-3.5 text-indigo-500" />
-          <span>Active Session:</span>
-          <span className="font-semibold text-slate-600 bg-slate-55 px-2 py-0.5 rounded border border-slate-100">
-            Temp: {config.temperature}
-          </span>
-          <span className="font-semibold text-slate-600 bg-slate-55 px-2 py-0.5 rounded border border-slate-100 hidden sm:inline">
-            Max: {config.maxTokens} tokens
-          </span>
-        </div>
-
-        <button 
-          onClick={onOpenSettings}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 rounded-lg border border-slate-200 transition-all active:scale-[0.98]"
-        >
-          <Settings className="h-3.5 w-3.5 text-slate-405" />
-          <span>Options</span>
-        </button>
-      </header>
-
       {/* Model-specific Alert Banner if NVIDIA key is missing */}
       {activeModel.provider === 'NVIDIA' && !serverKeyConfigured && !localStorage.getItem('nextray_custom_nvidia_key') && (
         <div className="bg-amber-50/70 border-b border-amber-100 px-6 py-2.5 flex items-center gap-2.5 text-xs text-amber-800">
@@ -602,11 +669,14 @@ export default function ChatArea({
           // Clean Minimal Welcome Screen
           <div className="max-w-2xl mx-auto py-16 md:py-24 space-y-12 select-none">
             <div className="text-center space-y-3">
+              <div className="mx-auto h-12 w-12 rounded-2xl overflow-hidden bg-slate-900 border border-slate-700/20 flex items-center justify-center shadow-lg animate-pulse mb-4">
+                <img src="/icon-pwa.png" alt="Next Ray Logo" className="h-[36px] w-[36px] object-contain" />
+              </div>
               <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-800 font-sans">
                 What are you working on?
               </h2>
               <p className="text-slate-400 max-w-md mx-auto text-sm font-normal">
-                Ask Next Ray anything. Your chats are synchronized with the real database.
+                Ask Next Ray anything or trigger Imagen 4 artistic painter directly. Chats are synchronized.
               </p>
             </div>
 
@@ -657,21 +727,17 @@ export default function ChatArea({
             {/* SSE Stream loader bubble */}
             {isStreamLoading && (
               <div className="flex gap-4 items-start py-4 w-full">
-                {/* Emerald Active Avatar */}
-                <div className="h-8 w-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs select-none flex-shrink-0 animate-pulse">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                    <path d="M2 12h20" />
-                  </svg>
+                {/* Brand Active Avatar */}
+                <div className="h-8 w-8 rounded-full overflow-hidden bg-slate-900 border border-slate-705/10 flex items-center justify-center select-none flex-shrink-0 animate-pulse">
+                  <img src="/icon-pwa.png" alt="Next Ray" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                 </div>
                 
                 {/* Sleek Thinking Chat Bubble & Dots */}
                 <div className="flex-1 space-y-2">
                   <div className="inline-flex items-center gap-1.5 rounded-2xl bg-slate-100 border border-slate-200/40 px-4 py-3 select-none">
-                    <span className="h-2 w-2 bg-emerald-600 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                    <span className="h-2 w-2 bg-emerald-600 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                    <span className="h-2 w-2 bg-emerald-600 rounded-full animate-bounce" />
+                    <span className="h-2 w-2 bg-slate-850 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                    <span className="h-2 w-2 bg-slate-850 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                    <span className="h-2 w-2 bg-slate-850 rounded-full animate-bounce" />
                   </div>
                   <span className="text-[11px] font-medium text-slate-400 block animate-pulse select-none">
                     Next Ray is crafting a response...
@@ -692,6 +758,155 @@ export default function ChatArea({
         </div>
       )}
 
+      {/* Imagen 4 AI Painter Studio Overlay Drawer */}
+      {showImagePanel && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl max-w-lg w-full flex flex-col overflow-hidden max-h-[90vh] animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-pink-100 text-pink-600">
+                  <Palette className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800 tracking-tight">Next Ray Imagen 4 Studio</h3>
+                  <p className="text-[10px] text-slate-450 font-mono">Google Generative Media Core</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowImagePanel(false);
+                  setGeneratedImageUrl(null);
+                  setImagePrompt('');
+                  setImageError(null);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100/80 transition-all cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Body Form */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              <form onSubmit={handleGenerateImage} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 tracking-tight block">Describe your masterpiece</label>
+                  <textarea
+                    value={imagePrompt}
+                    onChange={(e) => setImagePrompt(e.target.value)}
+                    placeholder="e.g. A hyper-detailed oil painting of a cybernetic tiger sitting on a mountain summit, neon highlights, starry night..."
+                    rows={3}
+                    disabled={isGeneratingImage}
+                    className="w-full p-3.5 bg-slate-50 border border-slate-205 rounded-xl text-xs focus:ring-2 focus:ring-pink-100 focus:bg-white focus:border-pink-450 focus:outline-none transition-all text-slate-800 resize-none leading-normal font-sans"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 tracking-tight block">Aspect Ratio</label>
+                    <select
+                      value={imageRatio}
+                      onChange={(e) => setImageRatio(e.target.value)}
+                      disabled={isGeneratingImage}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-semibold focus:outline-none focus:bg-white"
+                    >
+                      <option value="1:1">Standard Square (1:1)</option>
+                      <option value="16:9">Wide Cinematic (16:9)</option>
+                      <option value="9:16">Vertical Mobile (9:16)</option>
+                      <option value="4:3">Retro Classic (4:3)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-end">
+                    <button
+                      type="submit"
+                      disabled={isGeneratingImage || !imagePrompt.trim()}
+                      className="w-full bg-slate-900 text-white rounded-xl py-2.5 text-xs font-bold shadow-md hover:bg-slate-800 disabled:opacity-40 disabled:bg-slate-250 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      {isGeneratingImage ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Painting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3.5 w-3.5 text-pink-300" />
+                          <span>Generate Image</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              {/* Progress feedback */}
+              {isGeneratingImage && (
+                <div className="p-8 border border-dashed border-pink-100 rounded-2xl bg-pink-50/20 text-center space-y-3.5 animate-pulse">
+                  <div className="mx-auto h-12 w-12 rounded-full bg-pink-100/50 flex items-center justify-center text-pink-500">
+                    <Palette className="h-6 w-6 animate-spin duration-3000" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-slate-700">Synthesizing Diffusion Artwork...</p>
+                    <p className="text-[10px] text-pink-650 font-semibold">Running Imagen 4 algorithm on high-performance tensor networks</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Errors container */}
+              {imageError && (
+                <div className="p-4 rounded-xl bg-rose-50 border border-rose-150 text-rose-700 text-xs flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  <p className="leading-relaxed font-semibold">{imageError}</p>
+                </div>
+              )}
+
+              {/* Success Result Frame */}
+              {generatedImageUrl && (
+                <div className="space-y-4 animate-in zoom-in-95 duration-200">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 tracking-tight block">Generated Masterpiece</label>
+                    <div className="relative border border-slate-100 bg-slate-50 rounded-2xl overflow-hidden aspect-video shadow-md max-h-[220px]">
+                      <img 
+                        src={generatedImageUrl} 
+                        alt="Imagen output" 
+                        className="w-full h-full object-contain"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleApplyArtToChat}
+                      className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-xs font-bold hover:bg-indigo-700 shadow-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      <span>Insert into active chat</span>
+                    </button>
+                    <a
+                      href={generatedImageUrl}
+                      download={`nextray_artwork_${Date.now()}.jpg`}
+                      className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl flex items-center justify-center border border-slate-205 transition-all text-xs font-bold"
+                      title="Download image file to local device"
+                    >
+                      <Download className="h-4 w-4" />
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer metadata */}
+            <div className="px-6 py-3.5 bg-slate-50 text-[10px] text-slate-400 font-mono text-center border-t border-slate-100 selection:bg-indigo-100 select-none">
+              Secured Google Media Workspace APIs
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Localized ChatInputForm handles state updates individually for zero typing stutters! */}
       <ChatInputForm 
         onSendMessage={onSendMessage}
@@ -701,6 +916,12 @@ export default function ChatArea({
         fileInputRef={fileInputRef}
         handleFileChange={handleFileChange}
         formatBytes={formatBytes}
+        onOpenImageGenerator={() => {
+          setGeneratedImageUrl(null);
+          setImageError(null);
+          setImagePrompt('');
+          setShowImagePanel(true);
+        }}
       />
     </div>
   );
