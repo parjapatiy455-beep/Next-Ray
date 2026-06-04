@@ -15,13 +15,17 @@ import {
   AlertCircle, 
   Play, 
   Pause,
-  ArrowRight
+  ArrowRight,
+  Sparkle,
+  Globe,
+  Zap,
+  Ear
 } from 'lucide-react';
 
 interface VoiceAgentPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  onSendMessage: (text: string) => Promise<string | null>;
+  onSendMessage: (text: string, fileDataUrl?: string, fileType?: string, fileName?: string, fileSize?: number) => Promise<string | null>;
   isStreamLoading: boolean;
   messages: any[];
 }
@@ -36,7 +40,7 @@ interface VoiceOption {
 }
 
 const AVAILABLE_VOICES: VoiceOption[] = [
-  { id: 'Kore', name: 'Kore (Sweet & Soft)', gender: 'Female', description: 'A gentle, cheerful, and incredibly sweet feminine voice with natural cadence.' },
+  { id: 'Kore', name: 'Core (Feminine - Sweet)', gender: 'Female', description: 'A gentle, cheerful, and incredibly sweet feminine voice with natural cadence.' },
   { id: 'Zephyr', name: 'Zephyr (Warm & Calm)', gender: 'Male', description: 'A warm, soothing, and peaceful male voice for a gentle presence.' },
   { id: 'Puck', name: 'Puck (Enthusiastic)', gender: 'Female', description: 'A bright, lively, and highly energetic voice perfect for proactive brainstorming.' },
   { id: 'Charon', name: 'Charon (Intellectual)', gender: 'Male', description: 'A balanced, professional, and clear masculine voice with a deep tone.' },
@@ -54,6 +58,9 @@ export default function VoiceAgentPanel({
   const [selectedVoice, setSelectedVoice] = useState<string>(() => {
     return localStorage.getItem('nextray_selected_voice') || 'Kore';
   });
+
+  const [languageMode, setLanguageMode] = useState<'bilingual' | 'english'>('bilingual'); // Bilingual: Hindi + English (Hinglish)
+  const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0); // Conversational speed multiplier
 
   // Call States
   const [callState, setCallState] = useState<CallState>('IDLE');
@@ -75,6 +82,9 @@ export default function VoiceAgentPanel({
   const javascriptNodeRef = useRef<ScriptProcessorNode | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const recognitionActiveRef = useRef<boolean>(false);
+  const speakTimerRef = useRef<any>(null);
+  const ignoreVolumeThresholdRef = useRef<boolean>(false); // Ignore user voice during first split second of speech
 
   useEffect(() => {
     localStorage.setItem('nextray_selected_voice', selectedVoice);
@@ -83,6 +93,7 @@ export default function VoiceAgentPanel({
   // Clean-up on unmount
   useEffect(() => {
     return () => {
+      if (speakTimerRef.current) clearInterval(speakTimerRef.current);
       stopSpeechRecognition();
       stopMicrophoneAnalysis();
       stopPlayback();
@@ -122,8 +133,20 @@ export default function VoiceAgentPanel({
           values += array[i];
         }
         const average = values / length;
-        // Map average volume (0-128 range) to scale percentage
+        // Map average volume (0-128 range)
         setLiveVolume(average);
+
+        // REAL-TIME INTERRUPTION PROTOCOL:
+        // If the AI is currently speaking, and the user's voice intensity exceeds 32 (meaning they spoke or made an active sound),
+        // we instantly execute voice suppression, kill the TTS speaker stream, and resume listening to the user!
+        if (callState === 'SPEAKING' && !ignoreVolumeThresholdRef.current && average > 32) {
+          console.log("[Voice Agent Interruption] User sounds exceeded threshold, interrupting assistant...");
+          stopPlayback();
+          setLiveVolume(0);
+          setTranscript("Listening (Interrupted)...");
+          setCallState('LISTENING');
+          startSpeechRecognition();
+        }
       };
     } catch (err: any) {
       console.warn("Could not start micro-volume analysis:", err);
@@ -162,6 +185,7 @@ export default function VoiceAgentPanel({
   // Play natural deep-synthesis voice
   const speakWithGemini = async (text: string) => {
     try {
+      if (speakTimerRef.current) clearInterval(speakTimerRef.current);
       setCallState('CONNECTING');
       setErrorMsg(null);
 
@@ -187,36 +211,57 @@ export default function VoiceAgentPanel({
       // Play loaded audio
       const audio = new Audio(data.audioDataUrl);
       activeAudioRef.current = audio;
+      
+      // Control voice speed/rate
+      try {
+        audio.playbackRate = voiceSpeed;
+      } catch (e) {
+        console.warn("Playback speed control unsupported on this web layer.");
+      }
+
       setCallState('SPEAKING');
 
-      // Setup speaking pulsing animation
-      const interval = setInterval(() => {
+      // Set speech guard block so machine doesn't accidentally interrupt itself 
+      // in the first 800 milliseconds from acoustic feedback
+      ignoreVolumeThresholdRef.current = true;
+      const ignoreTimeout = setTimeout(() => {
+        ignoreVolumeThresholdRef.current = false;
+      }, 850);
+
+      // Setup speaking pulsing visualization wave
+      speakTimerRef.current = setInterval(() => {
         if (audio.paused || audio.ended) {
-          clearInterval(interval);
+          clearInterval(speakTimerRef.current);
           return;
         }
-        // Mock speech volumes for speaking state
-        setLiveVolume(25 + Math.random() * 45);
-      }, 100);
+        // Simulated speech frequencies for high-vibe voice ripples
+        setLiveVolume(18 + Math.random() * 42);
+      }, 76);
 
       audio.onended = () => {
-        clearInterval(interval);
+        clearTimeout(ignoreTimeout);
+        if (speakTimerRef.current) clearInterval(speakTimerRef.current);
         setCallState('LISTENING');
         setLiveVolume(0);
-        // Resume speech recognition automatically for conversational loop
+        // Resume speech recognition automatically for continuous natural voice communication
         startSpeechRecognition();
       };
 
       audio.onerror = (e) => {
-        clearInterval(interval);
+        clearTimeout(ignoreTimeout);
+        if (speakTimerRef.current) clearInterval(speakTimerRef.current);
         console.error("Audio playback error:", e);
         setErrorMsg("Failed to play synthesis stream.");
         setCallState('LISTENING');
         startSpeechRecognition();
       };
 
+      // Ensure active speech recognition does not capture audio synthesized output as input
+      stopSpeechRecognition();
+
       await audio.play();
     } catch (err: any) {
+      if (speakTimerRef.current) clearInterval(speakTimerRef.current);
       console.error(err);
       setErrorMsg(err.message || "Synthesis cluster error. Verify GEMINI_API_KEY.");
       setCallState('LISTENING');
@@ -232,14 +277,17 @@ export default function VoiceAgentPanel({
       activeAudioRef.current.src = "";
       activeAudioRef.current = null;
     }
+    if (speakTimerRef.current) {
+      clearInterval(speakTimerRef.current);
+    }
   };
 
-  // HTML5 Voice to Text SpeechRecognition listener loop
+  // HTML5 Voice to Text SpeechRecognition listener loop (optimized for bilingual)
   const startSpeechRecognition = () => {
     try {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (!SpeechRecognition) {
-        setErrorMsg("Your web browser lacks native SpeechRecognition. Use Google Chrome/Safari.");
+        setErrorMsg("Your web browser lacks native SpeechRecognition. Please use Google Chrome or Safari.");
         return;
       }
 
@@ -247,11 +295,18 @@ export default function VoiceAgentPanel({
 
       const recognition = new SpeechRecognition();
       recognitionRef.current = recognition;
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US'; // Supports multilingual speech translations
+      recognition.continuous = false; // Capture discrete chunks for ultra-fast reaction turnaround
+      recognition.interimResults = true; // High fidelity responsiveness
+      
+      // Auto-configure optimal dialects
+      if (languageMode === 'bilingual') {
+        recognition.lang = 'en-IN'; // Indian accent (optimal for Hinglish)
+      } else {
+        recognition.lang = 'en-US'; // Neutral English
+      }
 
       recognition.onstart = () => {
+        recognitionActiveRef.current = true;
         setCallState('LISTENING');
         setTranscript('');
         setErrorMsg(null);
@@ -271,32 +326,54 @@ export default function VoiceAgentPanel({
 
         const currentText = finalTranscript || interimTranscript;
         setTranscript(currentText);
+
+        // Interrupt assistant speaking instantly if transcription starts producing text
+        if (callState === 'SPEAKING') {
+          console.log("[Voice Agent Interruption] Transcription text feedback detected.");
+          stopPlayback();
+          setLiveVolume(0);
+          setCallState('LISTENING');
+        }
       };
 
       recognition.onerror = (event: any) => {
         if (event.error !== 'no-speech') {
-          console.warn("Speech recognition handler error:", event.error);
+          console.warn("Speech recognition warning:", event.error);
         }
       };
 
       recognition.onend = async () => {
-        // Recognition ends naturally. Check if we got text to respond to
+        recognitionActiveRef.current = false;
         setLiveVolume(0);
+        
+        // If we are still in listening mode, check if we parsed anything meaningful to answer
         if (recognitionRef.current) {
-          // If we are still in listening mode, check if we have transcribed speech
           setTranscript(prev => {
             const finalSpeech = prev.trim();
-            if (finalSpeech.length > 2) {
+            if (finalSpeech.length >= 2) {
               setCallState('THINKING');
-              // Trigger send message with the custom personalized bio combined
-              let processedText = finalSpeech;
+              
+              // Optimized high-speed vocal system prompts
+              // We instruct whichever LLM model is selected (even free NVIDIA ones) to reply in 1-2 lines for maximum speed!
+              const systemDirectives = [
+                `[System voice call directive: Speak in soft, realistic, comforting human phrasing. Provide a snappy, quick, and ultra-short conversational reply in maximum 1 or 2 lines of text. Do NOT emit markdown, code blocks, bullet points, or list structures under any circumstance. Answer directly and sweetly as if in a direct live phone call.]`
+              ];
+
               if (personalBio.trim()) {
-                processedText = `${finalSpeech}\n\n[System directive: Recall Parjapati's personalized memory/dataset to customise speech: "${personalBio.trim()}"]`;
+                systemDirectives.push(`[Your relationship profile summary for Parjapati: ${personalBio.trim()}]`);
               }
+
+              if (languageMode === 'bilingual') {
+                systemDirectives.push(`[Conversational language: You can blend both simple Hindi and English (Hinglish tone) sweetly as requested. Keep Hindi words simple, sweet, and warm.]`);
+              }
+
+              const processedText = `${finalSpeech}\n\n${systemDirectives.join('\n')}`;
               
               onSendMessage(processedText).then((responseContent) => {
                 if (responseContent) {
-                  speakWithGemini(responseContent);
+                  // Clean response of brackets to keep speech clean
+                  const cleanResponse = responseContent.replace(/\[[\s\S]*?\]/g, "");
+                  speakWithGemini(cleanResponse);
                 } else {
                   setCallState('LISTENING');
                   startSpeechRecognition();
@@ -306,8 +383,7 @@ export default function VoiceAgentPanel({
                 startSpeechRecognition();
               });
             } else {
-              // Loop back and listen again if empty transcript
-              // only if state remains listening
+              // Loop back and listen again if empty transcript was generated
               if (callState === 'LISTENING') {
                 try {
                   recognition.start();
@@ -323,6 +399,7 @@ export default function VoiceAgentPanel({
     } catch (e: any) {
       console.error(e);
       setErrorMsg("Failed to start speech tracking module.");
+      recognitionActiveRef.current = false;
     }
   };
 
@@ -337,12 +414,13 @@ export default function VoiceAgentPanel({
       } catch(e){}
       recognitionRef.current = null;
     }
+    recognitionActiveRef.current = false;
   };
 
   // Toggle Call active loop
   const handleToggleCall = async () => {
     if (callState !== 'IDLE') {
-      // Disconnecting
+      // Disconnecting Call
       stopSpeechRecognition();
       stopMicrophoneAnalysis();
       stopPlayback();
@@ -350,7 +428,7 @@ export default function VoiceAgentPanel({
       setTranscript('');
       setLiveVolume(0);
     } else {
-      // Connecting
+      // Connecting Call
       setCallState('CONNECTING');
       setErrorMsg(null);
       await startMicrophoneAnalysis();
@@ -361,14 +439,14 @@ export default function VoiceAgentPanel({
   // Voice Speaker tester preview
   const handlePreviewVoice = async (voiceId: string) => {
     const textSamples: Record<string, string> = {
-      Kore: "Hi there! I am Core, your soft, sweet-voiced companion. How can I help you today?",
-      Zephyr: "Welcome back. I am Zephyr, your cozy and warm companion. I'm listening to you.",
-      Puck: "Awesome! I am Puck. Let's get things done cheerfully! What's our next task?",
-      Charon: "Hello. I am Charon. I assist with deep research, data, and logic in a focused manner.",
-      Fenrir: "Don't worry, my friend. I am Fenrir, your strong, comforting presence. Tell me everything."
+      Kore: "Aap se baat karke bahut achha laga! Main aapki sweet companion hoon.",
+      Zephyr: "Hi friend, aapka swagat hai. Main Zephyr hoon, bilkul warm aur shaant.",
+      Puck: "Wah! Main bahot excited hoon. Let's start and solve problems together!",
+      Charon: "Hello. I am Charon. Main structural data aur analytics me expert assistant hoon.",
+      Fenrir: "Bilkul fikr mat kijiye, main aapke sath hoon. Tell me what is on your mind."
     };
 
-    const sample = textSamples[voiceId] || "Hello, this is a voice test.";
+    const sample = textSamples[voiceId] || "Hello, this is a sound test of Next Ray.";
     
     // Play synthesis
     try {
@@ -398,20 +476,31 @@ export default function VoiceAgentPanel({
 
   if (!isOpen) return null;
 
+  // Compute dynamic heights for natural Siri-style equalizer bars
+  const volumeScale = Math.min(Math.max(liveVolume, 2), 110);
+  const computeHeight = (factor: number) => {
+    if (callState === 'IDLE') return 'h-2';
+    const dynamicVal = Math.round(2 + (volumeScale * factor * 0.45));
+    return `${Math.min(dynamicVal, 48)}px`;
+  };
+
   return (
     <div className="w-full lg:w-[380px] bg-slate-50 border-l border-slate-200 h-full flex flex-col z-40 relative shadow-sm overflow-hidden select-none" id="voice-agent-pane">
       {/* Pane Header */}
       <div className="p-4 border-b border-slate-200 bg-white flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="p-1 px-1.5 bg-indigo-50 border border-indigo-100 rounded-lg text-indigo-600">
-            <Volume2 className="h-4.5 w-4.5 text-indigo-500" />
+            <Volume2 className="h-4.5 w-4.5 text-indigo-500 animate-pulse" />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-slate-800 tracking-tight flex items-center gap-1.5 leading-none">
-              Voice Agent Call
-              <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              Realtime Voice Agent
+              <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
             </h3>
-            <p className="text-[10px] text-slate-450 mt-1 leading-none">Next Ray Ultra Speech 3.1</p>
+            <p className="text-[10px] text-slate-450 mt-1 leading-none font-medium flex items-center gap-1">
+              <Zap className="h-3 w-3 text-amber-500 fill-amber-500" />
+              Bilingual (English / Hindi / Hinglish)
+            </p>
           </div>
         </div>
         <button
@@ -424,37 +513,67 @@ export default function VoiceAgentPanel({
 
       <div className="flex-1 overflow-y-auto p-5 space-y-6 scrollbar-thin scrollbar-thumb-slate-200">
         
-        {/* Active Call UI Module */}
+        {/* Realtime Call interface with Human Equalizer Waves */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden flex flex-col items-center text-center space-y-5">
-          {/* Decorative glow bg */}
-          <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-teal-400 via-indigo-500 to-pink-500" />
+          <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-400 via-indigo-500 to-purple-600" />
           
-          <div className="relative mt-2">
+          {/* Conversational speed dial indicator */}
+          <div className="w-full flex items-center justify-between text-[10px] text-slate-400 font-medium px-1">
+            <span className="flex items-center gap-1">
+              <Sparkle className="h-3 w-3 text-indigo-400 animate-spin" style={{ animationDuration: '4s' }} />
+              Active LLM Mode
+            </span>
+            <div className="flex items-center gap-1 bg-slate-50 border border-slate-150 px-2 py-0.5 rounded-full font-semibold text-slate-600">
+              <span>Speech Interruption: Active</span>
+            </div>
+          </div>
+
+          {/* Premium Audio Waves visualizer */}
+          <div className="h-16 flex items-center justify-center gap-1.5 px-6 w-full select-none">
+            {callState === 'IDLE' ? (
+              <div className="flex items-center gap-1 text-[11px] font-mono text-slate-400">
+                <Ear className="h-4.5 w-4.5 text-slate-350" />
+                <span>Microphone Standby</span>
+              </div>
+            ) : (
+              <>
+                <span className="w-1.5 bg-sky-400/90 rounded-full transition-all duration-75" style={{ height: computeHeight(0.3) }} />
+                <span className="w-1.5 bg-indigo-400 rounded-full transition-all duration-75" style={{ height: computeHeight(0.6) }} />
+                <span className="w-1.5 bg-teal-400 rounded-full transition-all duration-75" style={{ height: computeHeight(0.9) }} />
+                <span className="w-1.5 bg-indigo-600 rounded-full transition-all duration-75" style={{ height: computeHeight(1.2) }} />
+                <span className="w-1.5 bg-purple-500 rounded-full transition-all duration-75" style={{ height: computeHeight(1.0) }} />
+                <span className="w-1.5 bg-pink-400 rounded-full transition-all duration-75" style={{ height: computeHeight(0.7) }} />
+                <span className="w-1.5 bg-amber-400/90 rounded-full transition-all duration-75" style={{ height: computeHeight(0.4) }} />
+              </>
+            )}
+          </div>
+
+          <div className="relative">
             {/* Pulsing ring depending on volume */}
             <div 
-              className="absolute inset-0 rounded-full bg-indigo-100 transition-all duration-75 select-none"
+              className="absolute inset-[-12px] rounded-full bg-indigo-50 border border-indigo-100 transition-all duration-100"
               style={{
-                transform: `scale(${1 + (liveVolume / 90)})`,
-                opacity: callState !== 'IDLE' ? 0.4 + (liveVolume / 200) : 0
+                transform: `scale(${1 + (volumeScale / 100)})`,
+                opacity: callState !== 'IDLE' ? 0.5 + (volumeScale / 180) : 0
               }}
             />
-            {/* Core Mic Visual */}
+            {/* Core Phone Call / Microphone Trigger Action button */}
             <button
               onClick={handleToggleCall}
-              className={`relative h-20 w-20 rounded-full flex items-center justify-center transition-all cursor-pointer select-none ${
+              className={`relative h-20 w-20 rounded-full flex items-center justify-center transition-all cursor-pointer select-none border shadow-md ${
                 callState === 'IDLE' 
-                  ? 'bg-slate-100 border border-slate-250 text-slate-500 hover:bg-slate-200/80' 
+                  ? 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100' 
                   : callState === 'LISTENING'
-                  ? 'bg-emerald-500 text-white shadow-lg border border-emerald-400 shadow-emerald-500/10'
+                  ? 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/20'
                   : callState === 'SPEAKING'
-                  ? 'bg-indigo-600 text-white shadow-lg border border-indigo-500 shadow-indigo-600/10 animate-pulse'
-                  : 'bg-indigo-400 text-white animate-pulse'
+                  ? 'bg-indigo-600 text-white border-indigo-500 shadow-indigo-600/20'
+                  : 'bg-indigo-500 text-white border-indigo-400 animate-pulse'
               }`}
             >
               {callState === 'IDLE' ? (
-                <PhoneCall className="h-7 w-7" />
+                <PhoneCall className="h-7 w-7 text-indigo-600" />
               ) : callState === 'LISTENING' ? (
-                <Mic className="h-7 w-7" />
+                <Mic className="h-7 w-7 animate-pulse" />
               ) : callState === 'SPEAKING' ? (
                 <Volume2 className="h-7 w-7 animate-bounce" />
               ) : (
@@ -468,54 +587,106 @@ export default function VoiceAgentPanel({
               <span className={`h-2 w-2 rounded-full ${
                 callState === 'IDLE' ? 'bg-slate-400' :
                 callState === 'CONNECTING' ? 'bg-amber-400 animate-pulse' :
-                callState === 'LISTENING' ? 'bg-emerald-500 animate-pulse' :
-                callState === 'SPEAKING' ? 'bg-indigo-500 animate-bounce' : 'bg-pink-500 animate-pulse'
+                callState === 'LISTENING' ? 'bg-emerald-500 animate-ping' :
+                callState === 'SPEAKING' ? 'bg-indigo-500 animate-bounce' : 'bg-purple-500 animate-pulse'
               }`} />
-              {callState === 'IDLE' && "Offline — Idle"}
-              {callState === 'CONNECTING' && "Connecting voice cluster..."}
-              {callState === 'LISTENING' && "Listening... speak now"}
-              {callState === 'THINKING' && "Formulating reply..."}
-              {callState === 'SPEAKING' && "Next Ray speaking..."}
-              {callState === 'PAUSED' && "Call Paused"}
+              {callState === 'IDLE' && "Voice Connection Closed"}
+              {callState === 'CONNECTING' && "Connecting Cloud Synthesis..."}
+              {callState === 'LISTENING' && "Listening — Speaks naturally!"}
+              {callState === 'THINKING' && "Processing reply..."}
+              {callState === 'SPEAKING' && "Agent Speaking..."}
+              {callState === 'PAUSED' && "Paused"}
             </div>
             
-            <p className="text-[13px] text-slate-450 leading-relaxed max-w-xs mx-auto">
-              {callState === 'IDLE' && "Initiate a zero-lag vocal conversation. Our sweet voice responds as soon as you finish speaking."}
-              {callState === 'CONNECTING' && "Loading pre-trained voice modules from Google cloud..."}
-              {callState === 'LISTENING' && (transcript ? `"${transcript}"` : "Speak aloud. We will process, think, and speak natively.")}
-              {callState === 'THINKING' && "Synthesizing answers with Llama 3.3 model details..."}
-              {callState === 'SPEAKING' && "Enjoy soft, sweet-synthesis. Interrupt or toggle off anytime."}
+            <p className="text-[13px] text-slate-600 font-medium leading-relaxed max-w-xs mx-auto">
+              {callState === 'IDLE' && "Tap the button to start. Speaks exactly like a real human. To interrupt, just speak over it!"}
+              {callState === 'CONNECTING' && "Pre-hydrating soft human sound nodes from Google DeepMind network..."}
+              {callState === 'LISTENING' && (transcript ? `"${transcript}"` : "Active listening mode. Speak English, Hindi or mix both...")}
+              {callState === 'THINKING' && "Analyzing query with selected LLM model. Generating snappy reply..."}
+              {callState === 'SPEAKING' && "AI Sweet Speech active. You can interrupt by simply speaking out loud."}
             </p>
           </div>
 
-          {/* Connect / Terminate Session Action Button */}
+          {/* Interactive Toggle Button */}
           <button
             onClick={handleToggleCall}
-            className={`w-full py-2 px-4 rounded-xl text-xs font-semibold tracking-tight transition-all cursor-pointer flex items-center justify-center gap-2 select-none ${
+            className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold tracking-tight transition-all cursor-pointer flex items-center justify-center gap-2 select-none border ${
               callState === 'IDLE'
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/10'
-                : 'bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-500/10'
+                ? 'bg-indigo-600 border-indigo-700 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/10'
+                : 'bg-rose-500 border-rose-600 hover:bg-rose-600 text-white shadow-md shadow-rose-500/10'
             }`}
           >
             {callState === 'IDLE' ? (
               <>
                 <PhoneCall className="h-4 w-4" />
-                <span>Start Voice Call Session</span>
+                <span>Start Zero-Lag Voice Call</span>
               </>
             ) : (
               <>
                 <PhoneOff className="h-4 w-4" />
-                <span>Disconnect Call Service</span>
+                <span>End Voice Call Session</span>
               </>
             )}
           </button>
 
           {errorMsg && (
-            <div className="w-full p-3 rounded-xl bg-amber-50 border border-amber-100 text-[11px] text-amber-800 text-left flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div className="w-full p-3 rounded-xl bg-amber-50 border border-amber-100 text-[11px] text-amber-805 text-left flex items-start gap-2">
+              <AlertCircle className="h-4 text-amber-500 flex-shrink-0 mt-0.5" />
               <span>{errorMsg}</span>
             </div>
           )}
+        </div>
+
+        {/* Bilingual Dialect & Speed Options */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-amber-50 text-amber-600 rounded-xl">
+              <Globe className="h-4.5 w-4.5 text-amber-500" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-tight">Vocal Preferences</h4>
+              <p className="text-[10px] text-slate-400">Configure language dialects & speeds</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setLanguageMode('bilingual')}
+              className={`p-2 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer ${
+                languageMode === 'bilingual'
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Hinglish (Mix Hindi + Eng)
+            </button>
+            <button
+              onClick={() => setLanguageMode('english')}
+              className={`p-2 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer ${
+                languageMode === 'english'
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              English Only (US Dialect)
+            </button>
+          </div>
+
+          <div className="space-y-1.5 pt-1">
+            <div className="flex justify-between text-[10px] font-semibold text-slate-500">
+              <span>Speech Speed: {voiceSpeed.toFixed(1)}x</span>
+              <span>Default (1.0x)</span>
+            </div>
+            <input 
+              type="range" 
+              min={0.8} 
+              max={1.4} 
+              step={0.1}
+              value={voiceSpeed}
+              onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
+              className="w-full accent-indigo-600 cursor-pointer h-1.5 bg-slate-200 rounded-full"
+            />
+          </div>
         </div>
 
         {/* Training Data Personalization Memory Section */}
@@ -525,8 +696,8 @@ export default function VoiceAgentPanel({
               <Brain className="h-4.5 w-4.5 text-purple-500" />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-tight">Train & Personalize</h4>
-              <p className="text-[10px] text-slate-400">Teach Next Ray some facts to train its responses</p>
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-tight">Personal Memory Training</h4>
+              <p className="text-[10px] text-slate-400">Train Next Ray with your biological data or custom facts</p>
             </div>
           </div>
 
@@ -534,8 +705,8 @@ export default function VoiceAgentPanel({
             <textarea
               value={personalBio}
               onChange={(e) => setPersonalBio(e.target.value)}
-              placeholder="Example: My name is Parjapati. I built the talki app (https://talki.vercel.app/). Speak to me like a close friend, be highly comforting, and discuss tech design."
-              rows={4}
+              placeholder="Example: Mera naam Parjapati hai. Maine talki app banaya hai. Mere sath ek dost ki tarah baat karo aur design discuss karo."
+              rows={3}
               className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-purple-400 focus:bg-white text-slate-700 resize-none font-sans placeholder-slate-400 leading-normal"
             />
             
@@ -544,13 +715,13 @@ export default function VoiceAgentPanel({
               className="w-full py-2 bg-slate-900 border border-slate-950 text-white hover:bg-slate-800 font-semibold text-xs rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 select-none"
             >
               <Check className="h-3.5 w-3.5 text-emerald-400 font-bold" />
-              <span>Save Personal Memory</span>
+              <span>Save Direct Memory Fact</span>
             </button>
           </div>
 
           {showSavedToast && (
-            <p className="text-center text-[10px] text-emerald-600 font-semibold animate-sine-pulse">
-              ✓ Memories saved! Next Ray is immediately personalized to your data.
+            <p className="text-center text-[10px] text-emerald-600 font-semibold animate-pulse">
+              ✓ Facts persistent! Voice responses are now personalized.
             </p>
           )}
         </div>
@@ -562,8 +733,8 @@ export default function VoiceAgentPanel({
               <Settings className="h-4.5 w-4.5 text-teal-500" />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-tight">Voice Selection</h4>
-              <p className="text-[10px] text-slate-400">Sweet & soft realistic voices (not robotic)</p>
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-tight">Sweet-voice Selection</h4>
+              <p className="text-[10px] text-slate-405">Soft, soothing human voices (not robotic)</p>
             </div>
           </div>
 
@@ -583,7 +754,7 @@ export default function VoiceAgentPanel({
                     <p className={`text-xs font-semibold ${selectedVoice === voice.id ? 'text-indigo-900' : 'text-slate-800'}`}>
                       {voice.name}
                     </p>
-                    <span className="text-[9px] px-1 bg-slate-100 text-slate-500 rounded border border-slate-200 font-mono">
+                    <span className="text-[9px] px-1 bg-slate-100 text-slate-500 border border-slate-200 rounded font-mono">
                       {voice.gender === 'Female' ? 'F' : 'M'}
                     </span>
                   </div>
@@ -610,7 +781,7 @@ export default function VoiceAgentPanel({
       </div>
 
       <div className="p-4 border-t border-slate-200 bg-white text-center text-[9px] font-mono leading-none select-none text-slate-400">
-        POWERED BY GOOGLE DEEPMIND GEMINI API
+        POWERED BY DEEPMIND REALTIME AUDIO PROTOCOL
       </div>
     </div>
   );
