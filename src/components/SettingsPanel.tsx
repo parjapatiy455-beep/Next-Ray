@@ -173,6 +173,54 @@ export default function SettingsPanel({
                   onChange={(e) => onChangeCustomGeminiKey(e.target.value)}
                   className="w-full text-xs font-mono p-2 border border-slate-200 rounded-lg bg-slate-50/10 text-slate-800 focus:outline-none focus:border-indigo-200 transition-all placeholder-slate-350"
                 />
+
+                {/* Real-time Validation Diagnostic Tool */}
+                <div className="mt-2.5 pt-2 border-t border-slate-50">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const btn = document.getElementById('diagnose-btn');
+                      const statusBox = document.getElementById('diagnose-status');
+                      if (!btn || !statusBox) return;
+                      
+                      statusBox.classList.remove('hidden');
+                      btn.innerText = "Checking Key & TTS...";
+                      btn.setAttribute('disabled', 'true');
+                      statusBox.className = "mt-2 p-2.5 rounded text-[11px] leading-relaxed font-mono bg-indigo-50 text-indigo-700 animate-pulse whitespace-pre-line";
+                      statusBox.innerText = "Initiating handshake with Google Gemini API servers...";
+                      
+                      try {
+                        const response = await fetch('/api/voice/diagnose', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ customGeminiKey })
+                        });
+                        const data = await response.json();
+                        btn.innerText = "Run Status Check";
+                        btn.removeAttribute('disabled');
+                        
+                        if (data.success) {
+                          statusBox.className = "mt-2 p-2.5 rounded text-[11px] leading-relaxed font-mono bg-emerald-50 text-emerald-800 border border-emerald-100 whitespace-pre-line";
+                          statusBox.innerText = `✅ Success: Your Gemini key is working perfectly!\n${data.message}`;
+                        } else {
+                          statusBox.className = "mt-2 p-2.5 rounded text-[11px] leading-relaxed font-mono bg-red-55/90 text-red-800 border border-red-200 whitespace-pre-line p-3";
+                          statusBox.innerText = `❌ Diagnostic Alert:\n${data.message}`;
+                        }
+                      } catch (err: any) {
+                        btn.innerText = "Run Status Check";
+                        btn.removeAttribute('disabled');
+                        statusBox.className = "mt-2 p-2.5 rounded text-[11px] leading-relaxed font-mono bg-amber-50 text-amber-800 border border-amber-100 whitespace-pre-line";
+                        statusBox.innerText = `⚠️ Connection error: Failed to contact the backend service. Make sure your local server is running.\nDetails: ${err.message || 'Check connection'}`;
+                      }
+                    }}
+                    id="diagnose-btn"
+                    className="w-full text-[10px] font-bold uppercase tracking-wider bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 rounded-lg py-1.5 px-3 transition-all cursor-pointer border border-slate-200"
+                  >
+                    Test Gemini Key & TTS Status
+                  </button>
+                  <div id="diagnose-status" className="hidden"></div>
+                </div>
+
               </div>
             </div>
 
