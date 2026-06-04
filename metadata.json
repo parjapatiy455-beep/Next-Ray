@@ -1,6 +1,6 @@
 {
   "name": "Next Ray",
   "description": "An advanced AI model client platform for free NVIDIA NIM models and multimodal Google Gemini API, including Google authentication and Chat completions.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

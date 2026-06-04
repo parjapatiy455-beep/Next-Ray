@@ -151,6 +151,8 @@ export default function VoiceAgentPanel({
       };
     } catch (err: any) {
       console.warn("Could not start micro-volume analysis:", err);
+      setErrorMsg("Microphone permission denied or not found! Please click the lock icon in the address bar and set 'Microphone' to 'Allow'.");
+      throw err;
     }
   };
 
@@ -342,7 +344,22 @@ export default function VoiceAgentPanel({
       };
 
       recognition.onerror = (event: any) => {
-        if (event.error !== 'no-speech') {
+        console.error("Speech recognition error event:", event.error);
+        if (event.error === 'not-allowed') {
+          setErrorMsg("Microphone access is blocked! Please check your browser address bar (click the Lock icon) and change 'Microphone' permission to 'Allow', then refresh.");
+          stopSpeechRecognition();
+          stopMicrophoneAnalysis();
+          stopPlayback();
+          setCallState('IDLE');
+        } else if (event.error === 'service-not-allowed') {
+          setErrorMsg("Speech recognition is blocked in this container or frame context. Try opening the app in a new tab using the URL above.");
+          stopSpeechRecognition();
+          stopMicrophoneAnalysis();
+          stopPlayback();
+          setCallState('IDLE');
+        } else if (event.error === 'network') {
+          setErrorMsg("Speech recognition failed due to a network connection issue. Google speech synthesis requires stable internet.");
+        } else if (event.error !== 'no-speech') {
           console.warn("Speech recognition warning:", event.error);
         }
       };
@@ -384,10 +401,13 @@ export default function VoiceAgentPanel({
                 const cleanResponse = responseContent.replace(/\[[\s\S]*?\]/g, "");
                 speakWithGemini(cleanResponse);
               } else {
+                setErrorMsg("No response from AI model (likely unconfigured keys or rate limits).");
                 setCallState('LISTENING');
                 startSpeechRecognition();
               }
-            }).catch(() => {
+            }).catch((err: any) => {
+              console.error("onSendMessage failed:", err);
+              setErrorMsg(`AI Model error: ${err.message || "Request timed out"}`);
               setCallState('LISTENING');
               startSpeechRecognition();
             });
@@ -436,10 +456,18 @@ export default function VoiceAgentPanel({
       setLiveVolume(0);
     } else {
       // Connecting Call
-      setCallState('CONNECTING');
-      setErrorMsg(null);
-      await startMicrophoneAnalysis();
-      startSpeechRecognition();
+      try {
+        setCallState('CONNECTING');
+        setErrorMsg(null);
+        await startMicrophoneAnalysis();
+        startSpeechRecognition();
+      } catch (err: any) {
+        console.error("Failed to connect call:", err);
+        setCallState('IDLE');
+        stopSpeechRecognition();
+        stopMicrophoneAnalysis();
+        stopPlayback();
+      }
     }
   };
 
