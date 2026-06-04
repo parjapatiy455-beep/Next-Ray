@@ -288,6 +288,14 @@ export default function VoiceAgentPanel({
       if (speakTimerRef.current) clearInterval(speakTimerRef.current);
       console.warn("Premium Gemini TTS fell back to local browser speech synthesizer:", err);
       
+      let userFriendlyErr = "Real human voice failed. Falling back to simple robotic TTS. ";
+      if (err?.message?.includes("key") || err?.message?.includes("API") || err?.message?.includes("400") || err?.message?.includes("404") || err?.message?.includes("unconfigured")) {
+        userFriendlyErr += "Please set GEMINI_API_KEY as an environment variable in Cloudflare, or tap the Settings gear icon (above) and paste your Google Gemini API Key under Custom Keys.";
+      } else {
+        userFriendlyErr += `Error details: ${err?.message || "Failed request"}`;
+      }
+      setErrorMsg(userFriendlyErr);
+      
       try {
         window.speechSynthesis.cancel();
         
