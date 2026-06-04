@@ -192,27 +192,48 @@ export default function VoiceAgentPanel({
       setCallState('CONNECTING');
       setErrorMsg(null);
 
-      const response = await fetch('/api/voice/speak', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voiceName: selectedVoice })
-      });
+      const localGeminiKey = localStorage.getItem('nextray_custom_gemini_key') || '';
+      let audioUrl = '';
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `Voice synthesis failed (${response.status})`);
+      // If user has saved a Gemini API Key in the UI panel, call Google API directly!
+      // This allows the high-fidelity human voice stream to work beautifully on Cloudflare Pages.
+      if (localGeminiKey) {
+        try {
+          console.log("[Next Ray Voice Core] Initiating direct Google TTS calls with your customized Gemini Key...");
+          const { speakWithGeminiClientDirect } = await import('../lib/geminiTts');
+          audioUrl = await speakWithGeminiClientDirect(text, selectedVoice, localGeminiKey);
+        } catch (directErr: any) {
+          console.warn("[Next Ray Voice Core] Browser direct call failed, attempting server endpoint:", directErr);
+        }
       }
 
-      const data = await response.json();
-      if (!data.success || !data.audioDataUrl) {
-        throw new Error("No voice synthesis returned.");
+      if (!audioUrl) {
+        const response = await fetch('/api/voice/speak', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, voiceName: selectedVoice })
+        });
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("Voice synthesis endpoint not found (404). Since you are deployed on a static hosting (like Cloudflare Pages), please tap the Settings icon (top gear) and paste your Google Gemini API Key under Custom Keys to activate the real human Voice Core!");
+          }
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `Voice synthesis failed (${response.status})`);
+        }
+
+        const data = await response.json();
+        if (!data.success || !data.audioDataUrl) {
+          throw new Error("No voice synthesis returned.");
+        }
+        audioUrl = data.audioDataUrl;
       }
 
       // Stop previous playing audio
       stopPlayback();
 
       // Play loaded audio
-      const audio = new Audio(data.audioDataUrl);
+      const audio = new Audio(audioUrl);
       activeAudioRef.current = audio;
       
       // Control voice speed/rate

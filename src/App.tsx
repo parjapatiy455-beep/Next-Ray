@@ -261,6 +261,10 @@ export default function App() {
     return localStorage.getItem('nextray_custom_nvidia_key') || '';
   });
 
+  const [customGeminiKey, setCustomGeminiKey] = useState<string>(() => {
+    return localStorage.getItem('nextray_custom_gemini_key') || '';
+  });
+
   // Sidebar settings
   const [config, setConfig] = useState<ChatConfig>({
     modelId: 'meta/llama-3.3-70b-instruct',
@@ -340,6 +344,11 @@ Layouts:
   const handleCustomKeyChange = (val: string) => {
     setCustomNvidiaKey(val);
     localStorage.setItem('nextray_custom_nvidia_key', val);
+  };
+
+  const handleCustomGeminiKeyChange = (val: string) => {
+    setCustomGeminiKey(val);
+    localStorage.setItem('nextray_custom_gemini_key', val);
   };
 
   // 2. Authentication tracking (Google Client Login or LocalStorage Fallback)
@@ -1446,6 +1455,8 @@ Layouts:
         customKey={customNvidiaKey}
         onChangeCustomKey={handleCustomKeyChange}
         serverKeyConfigured={serverKeyConfigured}
+        customGeminiKey={customGeminiKey}
+        onChangeCustomGeminiKey={handleCustomGeminiKeyChange}
       />
     </div>
   );

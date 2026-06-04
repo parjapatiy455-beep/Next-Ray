@@ -594,33 +594,50 @@ export default function ChatArea({
         .slice(0, 1200);
 
       const preferredVoice = localStorage.getItem('nextray_selected_voice') || 'Kore';
+      const localGeminiKey = localStorage.getItem('nextray_custom_gemini_key') || '';
+      let audioUrl = '';
 
-      const response = await fetch('/api/voice/speak', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: cleanSpeech, voiceName: preferredVoice })
-      });
-
-      if (!response.ok) {
-        throw new Error("TTS endpoint failed");
+      // Direct client-side TTS if a custom Gemini key exists (enables static-site support like Cloudflare Pages)
+      if (localGeminiKey) {
+        try {
+          console.log("[Next Ray Chat TTS] Synthesizing directly via Google API client channel...");
+          const { speakWithGeminiClientDirect } = await import('../lib/geminiTts');
+          audioUrl = await speakWithGeminiClientDirect(cleanSpeech, preferredVoice, localGeminiKey);
+        } catch (directErr) {
+          console.warn("[Next Ray Chat TTS] Direct browser synthesis failed, falling back to server route:", directErr);
+        }
       }
 
-      const data = await response.json();
-      if (data.success && data.audioDataUrl) {
-        const audio = new Audio(data.audioDataUrl);
-        activeAudioRef.current = audio;
-        audio.onended = () => {
-          setIsSpeakingId(null);
-          activeAudioRef.current = null;
-        };
-        audio.onerror = () => {
-          setIsSpeakingId(null);
-          activeAudioRef.current = null;
-        };
-        await audio.play();
-      } else {
-        throw new Error("Failed playing TTS stream file stream");
+      if (!audioUrl) {
+        const response = await fetch('/api/voice/speak', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: cleanSpeech, voiceName: preferredVoice })
+        });
+
+        if (!response.ok) {
+          throw new Error("TTS endpoint failed");
+        }
+
+        const data = await response.json();
+        if (data.success && data.audioDataUrl) {
+          audioUrl = data.audioDataUrl;
+        } else {
+          throw new Error("Failed playing TTS stream file stream");
+        }
       }
+
+      const audio = new Audio(audioUrl);
+      activeAudioRef.current = audio;
+      audio.onended = () => {
+        setIsSpeakingId(null);
+        activeAudioRef.current = null;
+      };
+      audio.onerror = () => {
+        setIsSpeakingId(null);
+        activeAudioRef.current = null;
+      };
+      await audio.play();
     } catch (err) {
       console.warn("Premium TTS generation offline. Reverting to local browser speech:", err);
       window.speechSynthesis.cancel();

@@ -18,6 +18,8 @@ interface SettingsPanelProps {
   customKey: string;
   onChangeCustomKey: (val: string) => void;
   serverKeyConfigured: boolean;
+  customGeminiKey: string;
+  onChangeCustomGeminiKey: (val: string) => void;
 }
 
 export default function SettingsPanel({
@@ -28,6 +30,8 @@ export default function SettingsPanel({
   customKey,
   onChangeCustomKey,
   serverKeyConfigured,
+  customGeminiKey,
+  onChangeCustomGeminiKey,
 }: SettingsPanelProps) {
   if (!isOpen) return null;
 
@@ -128,40 +132,46 @@ export default function SettingsPanel({
               </div>
             </div>
 
-            {/* 3. API Integrations (Hashed Key) */}
+            {/* 3. API Integrations */}
             <div className="space-y-4 border-t border-slate-100 pt-5">
-              <label className="flex items-center gap-2 text-[10px] font-bold font-mono uppercase tracking-widest text-slate-405">
-                <Key className="h-3.5 w-3.5 text-indigo-505" />
-                NVIDIA Integration Secret
+              <label className="flex items-center gap-2 text-[10px] font-bold font-mono uppercase tracking-widest text-slate-500">
+                <Key className="h-3.5 w-3.5 text-indigo-500" />
+                API Key Configurations
               </label>
 
-              {serverKeyConfigured ? (
-                <div className="p-3 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-155 text-xs flex items-center gap-2.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
-                  <span className="font-medium">
-                    Secure server-side NVIDIA API active in workspace.
-                  </span>
-                </div>
-              ) : (
-                <div className="p-3 bg-amber-50 text-amber-800 rounded-lg border border-amber-155 text-xs text-left space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-amber-400 flex-shrink-0 animate-pulse" />
-                    <span className="font-semibold text-amber-900">Custom Key Mode</span>
+              {/* NVIDIA custom key */}
+              <div className="space-y-1.5 border-b border-dashed border-slate-100 pb-3">
+                <p className="text-[11px] font-semibold text-slate-600">NVIDIA NIM API Key (optional)</p>
+                {serverKeyConfigured ? (
+                  <div className="p-2 py-1 bg-emerald-50 text-emerald-800 rounded text-[10px] flex items-center gap-2 w-fit">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+                    <span className="font-medium">Active in cloud server</span>
                   </div>
-                  <p className="text-[11px] text-amber-700 leading-normal font-normal">
-                    Insert an NVIDIA API key in local `.env` or paste a NIM Client Web API temporary token below for immediate testing!
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-1">
-                <p className="text-[11px] text-slate-400">Temporary NIM Session Key (optional)</p>
+                ) : null}
                 <input
                   type="password"
                   placeholder="nvapi-..."
                   value={customKey}
                   onChange={(e) => onChangeCustomKey(e.target.value)}
-                  className="w-full text-xs font-mono p-2.5 border border-slate-200 rounded-lg bg-slate-50/10 text-slate-800 focus:outline-none focus:border-indigo-200 transition-all placeholder-slate-350"
+                  className="w-full text-xs font-mono p-2 border border-slate-200 rounded-lg bg-slate-50/10 text-slate-800 focus:outline-none focus:border-indigo-200 transition-all placeholder-slate-350"
+                />
+              </div>
+
+              {/* Custom Gemini key */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <p className="text-[11px] font-semibold text-slate-600">Google Gemini API Key</p>
+                  <span className="text-[9px] text-indigo-600 font-mono tracking-wide px-1.5 py-0.5 rounded bg-indigo-50">Pages Voice Core</span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  Provide your Gemini Key here. Enables the ultra-realistic human Voice synthesize direct from your browser when hosted on static sites like Cloudflare.
+                </p>
+                <input
+                  type="password"
+                  placeholder="AIzaSy..."
+                  value={customGeminiKey || ''}
+                  onChange={(e) => onChangeCustomGeminiKey(e.target.value)}
+                  className="w-full text-xs font-mono p-2 border border-slate-200 rounded-lg bg-slate-50/10 text-slate-800 focus:outline-none focus:border-indigo-200 transition-all placeholder-slate-350"
                 />
               </div>
             </div>
