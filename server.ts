@@ -125,6 +125,33 @@ app.post("/api/chats/slug", (req, res) => {
   res.json({ slug });
 });
 
+// Helper to prepend a standard WAV container header to raw 16-bit Mono PCM bytes
+// (The Gemini 3.1 tts model returns raw headerless PCM at a 24000 Hz sample rate)
+function addWavHeader(pcmBuffer: Buffer, sampleRate: number = 24000): Buffer {
+  const header = Buffer.alloc(44);
+  
+  // "RIFF" chunk descriptor
+  header.write("RIFF", 0);
+  header.writeUInt32LE(pcmBuffer.length + 36, 4); // File size minus 8 bytes
+  header.write("WAVE", 8);
+  
+  // "fmt " subchunk
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);          // Subchunk size (16 for PCM)
+  header.writeUInt16LE(1, 20);           // Audio format (1 = PCM)
+  header.writeUInt16LE(1, 22);           // Num channels (1 = Mono)
+  header.writeUInt32LE(sampleRate, 24);  // Sample rate (24000 Hz)
+  header.writeUInt32LE(sampleRate * 2, 28); // Byte rate (sampleRate * numChannels * bytesPerSample = 24000 * 1 * 2)
+  header.writeUInt16LE(2, 32);           // Block align (numChannels * bytesPerSample = 1 * 2)
+  header.writeUInt16LE(16, 34);          // Bits per sample (16-bit)
+  
+  // "data" subchunk
+  header.write("data", 36);
+  header.writeUInt32LE(pcmBuffer.length, 40); // Size of the data chunk
+  
+  return Buffer.concat([header, pcmBuffer]);
+}
+
 // Voice Synthesis API (TTS) using Gemini 3.1 tts model
 app.post("/api/voice/speak", async (req, res) => {
   try {
@@ -180,7 +207,12 @@ app.post("/api/voice/speak", async (req, res) => {
 
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (base64Audio) {
-      return res.json({ success: true, audioDataUrl: `data:audio/wav;base64,${base64Audio}` });
+      // Decode raw PCM, prepend WAV header, and re-encode to Base64 WAV
+      const rawPcm = Buffer.from(base64Audio, 'base64');
+      const wavBuffer = addWavHeader(rawPcm, 24000);
+      const base64Wav = wavBuffer.toString('base64');
+      
+      return res.json({ success: true, audioDataUrl: `data:audio/wav;base64,${base64Wav}` });
     } else {
       throw new Error("Gemini TTS service did not return audio bytes.");
     }
