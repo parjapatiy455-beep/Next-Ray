@@ -851,7 +851,8 @@ Layouts:
     fileDataUrl?: string, 
     fileType?: string, 
     fileName?: string, 
-    fileSize?: number
+    fileSize?: number,
+    onChunk?: (accumulatedText: string) => void
   ) => {
     if (!user || isStreamLoading) return;
 
@@ -1025,6 +1026,9 @@ Layouts:
             }
             if (parsed.text) {
               accumulatedText += parsed.text;
+              if (onChunk) {
+                onChunk(accumulatedText);
+              }
               
               const now = Date.now();
               // Live auto pop-up workbench as soon as slides or HTML template initiates

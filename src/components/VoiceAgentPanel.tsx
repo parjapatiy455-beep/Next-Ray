@@ -25,7 +25,14 @@ import {
 interface VoiceAgentPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  onSendMessage: (text: string, fileDataUrl?: string, fileType?: string, fileName?: string, fileSize?: number) => Promise<string | null>;
+  onSendMessage: (
+    text: string, 
+    fileDataUrl?: string, 
+    fileType?: string, 
+    fileName?: string, 
+    fileSize?: number,
+    onChunk?: (accumulatedText: string) => void
+  ) => Promise<string | null>;
   isStreamLoading: boolean;
   messages: any[];
 }
@@ -86,6 +93,13 @@ export default function VoiceAgentPanel({
   const speakTimerRef = useRef<any>(null);
   const ignoreVolumeThresholdRef = useRef<boolean>(false); // Ignore user voice during first split second of speech
   const transcriptRef = useRef<string>('');
+
+  // Real-time audio queue and stream parser state refs
+  const playbackQueueRef = useRef<any[]>([]);
+  const currentPlayingIndexRef = useRef<number>(0);
+  const nextSentenceIdRef = useRef<number>(0);
+  const lastParsedIndexRef = useRef<number>(0);
+  const isStreamFinishedRef = useRef<boolean>(false);
 
   useEffect(() => {
     localStorage.setItem('nextray_selected_voice', selectedVoice);
@@ -185,174 +199,200 @@ export default function VoiceAgentPanel({
     }
   };
 
-  // Play natural deep-synthesis voice
-  const speakWithGemini = async (text: string) => {
+  // Synthesise sentence and queue it
+  const synthesizeSentence = async (item: any) => {
     try {
-      if (speakTimerRef.current) clearInterval(speakTimerRef.current);
-      setCallState('CONNECTING');
-      setErrorMsg(null);
-
       const localGeminiKey = localStorage.getItem('nextray_custom_gemini_key') || '';
-      let audioUrl = '';
+      let url = '';
 
-      // If user has saved a Gemini API Key in the UI panel, call Google API directly!
-      // This allows the high-fidelity human voice stream to work beautifully on Cloudflare Pages.
       if (localGeminiKey) {
         try {
-          console.log("[Next Ray Voice Core] Initiating direct Google TTS calls with your customized Gemini Key...");
           const { speakWithGeminiClientDirect } = await import('../lib/geminiTts');
-          audioUrl = await speakWithGeminiClientDirect(text, selectedVoice, localGeminiKey);
-        } catch (directErr: any) {
-          console.warn("[Next Ray Voice Core] Browser direct call failed, attempting server endpoint:", directErr);
+          url = await speakWithGeminiClientDirect(item.text, selectedVoice, localGeminiKey);
+        } catch (directErr) {
+          console.warn("[Voice Core - Queue] Direct synthesis failed:", directErr);
         }
       }
 
-      if (!audioUrl) {
+      if (!url) {
         const response = await fetch('/api/voice/speak', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, voiceName: selectedVoice })
+          body: JSON.stringify({ text: item.text, voiceName: selectedVoice })
         });
 
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new Error("Voice synthesis endpoint not found (404). Since you are deployed on a static hosting (like Cloudflare Pages), please tap the Settings icon (top gear) and paste your Google Gemini API Key under Custom Keys to activate the real human Voice Core!");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.audioDataUrl) {
+            url = data.audioDataUrl;
           }
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || `Voice synthesis failed (${response.status})`);
         }
-
-        const data = await response.json();
-        if (!data.success || !data.audioDataUrl) {
-          throw new Error("No voice synthesis returned.");
-        }
-        audioUrl = data.audioDataUrl;
       }
 
-      // Stop previous playing audio
-      stopPlayback();
-
-      // Play loaded audio
-      const audio = new Audio(audioUrl);
-      activeAudioRef.current = audio;
-      
-      // Control voice speed/rate
-      try {
-        audio.playbackRate = voiceSpeed;
-      } catch (e) {
-        console.warn("Playback speed control unsupported on this web layer.");
-      }
-
-      setCallState('SPEAKING');
-
-      // Set speech guard block so machine doesn't accidentally interrupt itself 
-      // in the first 800 milliseconds from acoustic feedback
-      ignoreVolumeThresholdRef.current = true;
-      const ignoreTimeout = setTimeout(() => {
-        ignoreVolumeThresholdRef.current = false;
-      }, 850);
-
-      // Setup speaking pulsing visualization wave
-      speakTimerRef.current = setInterval(() => {
-        if (audio.paused || audio.ended) {
-          clearInterval(speakTimerRef.current);
-          return;
-        }
-        // Simulated speech frequencies for high-vibe voice ripples
-        setLiveVolume(18 + Math.random() * 42);
-      }, 76);
-
-      audio.onended = () => {
-        clearTimeout(ignoreTimeout);
-        if (speakTimerRef.current) clearInterval(speakTimerRef.current);
-        setCallState('LISTENING');
-        setLiveVolume(0);
-        // Resume speech recognition automatically for continuous natural voice communication
-        startSpeechRecognition();
-      };
-
-      audio.onerror = (e) => {
-        clearTimeout(ignoreTimeout);
-        if (speakTimerRef.current) clearInterval(speakTimerRef.current);
-        console.error("Audio playback error:", e);
-        setErrorMsg("Failed to play synthesis stream.");
-        setCallState('LISTENING');
-        startSpeechRecognition();
-      };
-
-      // Ensure active speech recognition does not capture audio synthesized output as input
-      stopSpeechRecognition();
-
-      await audio.play();
-    } catch (err: any) {
-      if (speakTimerRef.current) clearInterval(speakTimerRef.current);
-      console.warn("Premium Gemini TTS fell back to local browser speech synthesizer:", err);
-      
-      let userFriendlyErr = "Real human voice failed. Falling back to simple robotic TTS. ";
-      if (err?.message?.includes("key") || err?.message?.includes("API") || err?.message?.includes("400") || err?.message?.includes("404") || err?.message?.includes("unconfigured")) {
-        userFriendlyErr += "Please set GEMINI_API_KEY as an environment variable in Cloudflare, or tap the Settings gear icon (above) and paste your Google Gemini API Key under Custom Keys.";
+      if (url) {
+        item.audioUrl = url;
+        processPlaybackQueue();
       } else {
-        userFriendlyErr += `Error details: ${err?.message || "Failed request"}`;
+        throw new Error("Empty audio synthesis url returned");
       }
-      setErrorMsg(userFriendlyErr);
-      
-      try {
-        window.speechSynthesis.cancel();
-        
-        // Ensure active speech recognition does not capture audio synthesized output as input
-        stopSpeechRecognition();
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        
-        // Match chosen voice preference if possible
-        utterance.rate = voiceSpeed || 1.0;
-        
-        const voices = window.speechSynthesis.getVoices();
-        let matchedVoice = null;
-        if (languageMode === 'hindi' || languageMode === 'bilingual') {
-          matchedVoice = voices.find(v => v.lang.startsWith('hi-') || v.lang.startsWith('en-IN')) || voices.find(v => v.lang.startsWith('en-'));
-        } else {
-          matchedVoice = voices.find(v => v.lang.startsWith('en-'));
-        }
-        if (matchedVoice) {
-          utterance.voice = matchedVoice;
-        }
+    } catch (e) {
+      console.warn("[Voice Core - Queue] Synthesis failed for sentence:", item.text, e);
+      item.failed = true;
+      processPlaybackQueue();
+    }
+  };
 
-        setCallState('SPEAKING');
-        
-        // Setup visual ripple waves for voice amplitude simulation
-        speakTimerRef.current = setInterval(() => {
-          if (!window.speechSynthesis.speaking) {
-            if (speakTimerRef.current) clearInterval(speakTimerRef.current);
-            return;
-          }
-          setLiveVolume(18 + Math.random() * 42);
-        }, 76);
+  const processPlaybackQueue = () => {
+    if (callState === 'IDLE' || callState === 'CONNECTING') return;
 
-        utterance.onend = () => {
-          if (speakTimerRef.current) clearInterval(speakTimerRef.current);
-          setCallState('LISTENING');
-          setLiveVolume(0);
-          startSpeechRecognition();
-        };
+    const currentItem = playbackQueueRef.current.find(itm => itm.id === currentPlayingIndexRef.current);
+    if (!currentItem) {
+      return;
+    }
 
-        utterance.onerror = (evt) => {
-          console.warn("Local speech synthesis warning:", evt);
-          if (speakTimerRef.current) clearInterval(speakTimerRef.current);
-          setCallState('LISTENING');
-          setLiveVolume(0);
-          startSpeechRecognition();
-        };
-
-        window.speechSynthesis.speak(utterance);
-      } catch (speechErr) {
-        console.error("Local SpeechSynthesis failed completely:", speechErr);
-        setErrorMsg("Voice system offline. Please verify API endpoints.");
-        setCallState('LISTENING');
-        setLiveVolume(0);
-        startSpeechRecognition();
+    if (currentItem.audioUrl) {
+      if (!activeAudioRef.current || activeAudioRef.current.paused) {
+        playItem(currentItem);
+      }
+    } else if (currentItem.failed) {
+      if (!activeAudioRef.current || !window.speechSynthesis.speaking) {
+        playItemLocalFallback(currentItem);
       }
     }
+  };
+
+  const playItem = (item: any) => {
+    setCallState('SPEAKING');
+
+    const audio = new Audio(item.audioUrl);
+    activeAudioRef.current = audio;
+
+    try {
+      audio.playbackRate = voiceSpeed;
+    } catch (e) {}
+
+    if (speakTimerRef.current) clearInterval(speakTimerRef.current);
+    speakTimerRef.current = setInterval(() => {
+      if (audio.paused || audio.ended) {
+        clearInterval(speakTimerRef.current);
+        return;
+      }
+      setLiveVolume(18 + Math.random() * 42);
+    }, 76);
+
+    ignoreVolumeThresholdRef.current = true;
+    const ignoreTimeout = setTimeout(() => {
+      ignoreVolumeThresholdRef.current = false;
+    }, 450);
+
+    audio.onended = () => {
+      clearTimeout(ignoreTimeout);
+      if (speakTimerRef.current) clearInterval(speakTimerRef.current);
+      activeAudioRef.current = null;
+
+      currentPlayingIndexRef.current += 1;
+
+      const nextItem = playbackQueueRef.current.find(itm => itm.id === currentPlayingIndexRef.current);
+      if (nextItem) {
+        processPlaybackQueue();
+      } else {
+        if (isStreamFinishedRef.current) {
+          setCallState('LISTENING');
+          setLiveVolume(0);
+          startSpeechRecognition();
+        } else {
+          setCallState('THINKING');
+          setLiveVolume(0);
+        }
+      }
+    };
+
+    audio.onerror = (e) => {
+      clearTimeout(ignoreTimeout);
+      if (speakTimerRef.current) clearInterval(speakTimerRef.current);
+      console.warn("Audio queue item play error:", e);
+      activeAudioRef.current = null;
+      currentPlayingIndexRef.current += 1;
+      processPlaybackQueue();
+    };
+
+    stopSpeechRecognition();
+    audio.play().catch(playErr => {
+      console.warn("Audio element failed to initiate play:", playErr);
+      currentPlayingIndexRef.current += 1;
+      processPlaybackQueue();
+    });
+  };
+
+  const playItemLocalFallback = (item: any) => {
+    setCallState('SPEAKING');
+
+    window.speechSynthesis.cancel();
+    stopSpeechRecognition();
+
+    const utterance = new SpeechSynthesisUtterance(item.text);
+    utterance.rate = voiceSpeed || 1.0;
+
+    const voices = window.speechSynthesis.getVoices();
+    let matchedVoice = null;
+    if (languageMode === 'hindi' || languageMode === 'bilingual') {
+      matchedVoice = voices.find(v => v.lang.startsWith('hi-') || v.lang.startsWith('en-IN')) || voices.find(v => v.lang.startsWith('en-'));
+    } else {
+      matchedVoice = voices.find(v => v.lang.startsWith('en-'));
+    }
+    if (matchedVoice) {
+      utterance.voice = matchedVoice;
+    }
+
+    if (speakTimerRef.current) clearInterval(speakTimerRef.current);
+    speakTimerRef.current = setInterval(() => {
+      if (!window.speechSynthesis.speaking) {
+        if (speakTimerRef.current) clearInterval(speakTimerRef.current);
+        return;
+      }
+      setLiveVolume(18 + Math.random() * 42);
+    }, 76);
+
+    utterance.onend = () => {
+      if (speakTimerRef.current) clearInterval(speakTimerRef.current);
+
+      currentPlayingIndexRef.current += 1;
+
+      const nextItem = playbackQueueRef.current.find(itm => itm.id === currentPlayingIndexRef.current);
+      if (nextItem) {
+        processPlaybackQueue();
+      } else {
+        if (isStreamFinishedRef.current) {
+          setCallState('LISTENING');
+          setLiveVolume(0);
+          startSpeechRecognition();
+        } else {
+          setCallState('THINKING');
+          setLiveVolume(0);
+        }
+      }
+    };
+
+    utterance.onerror = () => {
+      if (speakTimerRef.current) clearInterval(speakTimerRef.current);
+      currentPlayingIndexRef.current += 1;
+      processPlaybackQueue();
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Play natural deep-synthesis voice (acts as single item compatibility interface)
+  const speakWithGemini = (text: string) => {
+    stopPlayback();
+    const item = {
+      id: nextSentenceIdRef.current++,
+      text: text,
+      audioUrl: undefined,
+    };
+    playbackQueueRef.current.push(item);
+    isStreamFinishedRef.current = true;
+    synthesizeSentence(item);
   };
 
   // Stop active speech playback
@@ -362,8 +402,63 @@ export default function VoiceAgentPanel({
       activeAudioRef.current.src = "";
       activeAudioRef.current = null;
     }
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {}
     if (speakTimerRef.current) {
       clearInterval(speakTimerRef.current);
+    }
+    playbackQueueRef.current = [];
+    currentPlayingIndexRef.current = 0;
+    nextSentenceIdRef.current = 0;
+    lastParsedIndexRef.current = 0;
+    isStreamFinishedRef.current = false;
+  };
+
+  // Helper to slice completed sentences and trigger real-time playback
+  const handleNewStreamedText = (cumulativeText: string) => {
+    const cleanCumulative = cumulativeText.replace(/\[[\s\S]*?\]/g, "");
+    const currentText = cleanCumulative.substring(lastParsedIndexRef.current);
+
+    const delimiters = ['.', '?', '!', '।', '\n'];
+
+    let searchIndex = 0;
+    while (searchIndex < currentText.length) {
+      const char = currentText[searchIndex];
+      const isDelimiter = delimiters.includes(char);
+      const isLongComma = (searchIndex > 65 && (char === ',' || char === ';'));
+
+      if (isDelimiter || isLongComma) {
+        const sentenceText = currentText.substring(0, searchIndex + 1).trim();
+        if (sentenceText.length > 0) {
+          const item = {
+            id: nextSentenceIdRef.current++,
+            text: sentenceText,
+            audioUrl: undefined,
+          };
+          playbackQueueRef.current.push(item);
+          synthesizeSentence(item);
+        }
+
+        lastParsedIndexRef.current += searchIndex + 1;
+        handleNewStreamedText(cleanCumulative);
+        return;
+      }
+      searchIndex++;
+    }
+  };
+
+  const handleRemainingTrailingText = (finalFullText: string) => {
+    const cleanCumulative = finalFullText.replace(/\[[\s\S]*?\]/g, "");
+    const trailingText = cleanCumulative.substring(lastParsedIndexRef.current).trim();
+    if (trailingText.length > 0) {
+      const item = {
+        id: nextSentenceIdRef.current++,
+        text: trailingText,
+        audioUrl: undefined,
+      };
+      playbackQueueRef.current.push(item);
+      synthesizeSentence(item);
     }
   };
 
@@ -459,8 +554,14 @@ export default function VoiceAgentPanel({
           if (finalSpeech.length >= 2) {
             setCallState('THINKING');
             
+            // RESET STREAM QUEUE trackers
+            playbackQueueRef.current = [];
+            currentPlayingIndexRef.current = 0;
+            nextSentenceIdRef.current = 0;
+            lastParsedIndexRef.current = 0;
+            isStreamFinishedRef.current = false;
+            
             // Optimized high-speed vocal system prompts
-            // We instruct whichever LLM model is selected (even free NVIDIA ones) to reply in 1-2 lines for maximum speed!
             const systemDirectives = [
               `[System voice call directive: Speak in soft, realistic, comforting human phrasing. Provide a snappy, quick, and ultra-short conversational reply in maximum 1 or 2 lines of text. Do NOT emit markdown, code blocks, bullet points, or list structures under any circumstance. Answer directly and sweetly as if in a direct live phone call.]`
             ];
@@ -477,21 +578,34 @@ export default function VoiceAgentPanel({
 
             const processedText = `${finalSpeech}\n\n${systemDirectives.join('\n')}`;
             
-            onSendMessage(processedText).then((responseContent) => {
+            // Pass the custom streaming callback!
+            onSendMessage(processedText, undefined, undefined, undefined, undefined, (cumulativeText) => {
+              // Extract new chunks and split into completed sentences!
+              handleNewStreamedText(cumulativeText);
+            }).then((responseContent) => {
+              isStreamFinishedRef.current = true;
               if (responseContent) {
-                // Clean response of brackets to keep speech clean
-                const cleanResponse = responseContent.replace(/\[[\s\S]*?\]/g, "");
-                speakWithGemini(cleanResponse);
+                handleRemainingTrailingText(responseContent);
+                // Trigger queue checker in case it finished downloading
+                processPlaybackQueue();
               } else {
-                setErrorMsg("No response from AI model (likely unconfigured keys or rate limits).");
-                setCallState('LISTENING');
-                startSpeechRecognition();
+                if (playbackQueueRef.current.length === 0) {
+                  setErrorMsg("No response from AI model (likely unconfigured keys or rate limits).");
+                  setCallState('LISTENING');
+                  startSpeechRecognition();
+                }
               }
             }).catch((err: any) => {
               console.error("onSendMessage failed:", err);
-              setErrorMsg(`AI Model error: ${err.message || "Request timed out"}`);
-              setCallState('LISTENING');
-              startSpeechRecognition();
+              // Only fail if we haven't played anything yet
+              if (playbackQueueRef.current.filter(x => x.audioUrl || x.failed).length === 0) {
+                setErrorMsg(`AI Model error: ${err.message || "Request timed out"}`);
+                setCallState('LISTENING');
+                startSpeechRecognition();
+              } else {
+                isStreamFinishedRef.current = true;
+                processPlaybackQueue();
+              }
             });
           } else {
             // Loop back and listen again if empty transcript was generated
